@@ -14,12 +14,13 @@ df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
 df = df.drop_duplicates(subset=['cpc_subgroup'])
 
 # Initialize YAKE model
-kw_model = KeyBERT()
+kw_model = KeyBERT(model='climatebert/distilroberta-base-climate-f')
 
 # Iterate over rows in dataframe
+# Try out with MMR and rather high diversity 0.7, might try with lower diversity
 for index, row in df.iterrows():
     # Extract keywords
-    keywords = kw_model.extract_keywords(row['patent_abstract'],keyphrase_ngram_range=(1, 3),stop_words="english", use_mmr=True)
+    keywords = kw_model.extract_keywords(row['patent_abstract'],keyphrase_ngram_range=(1, 3),stop_words="english", use_mmr=True, diversity=0.7)
     # Create empty list
     keywords_list = []
     # Iterate over keywords

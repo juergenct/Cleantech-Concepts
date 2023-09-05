@@ -21,7 +21,7 @@ vectorizer_model = CountVectorizer(ngram_range=(1, 3), stop_words="english")
 ctfidf_model = ClassTfidfTransformer()
 
 representation_model_KeyBERT = KeyBERTInspired()
-representation_model_MMR = MaximalMarginalRelevance(diversity=0.3)
+representation_model_MMR = MaximalMarginalRelevance(diversity=0.7) # Try out with MMR and rather high diversity 0.7, might try with lower diversity
 representation_model_chain = [representation_model_MMR, representation_model_KeyBERT]
 
 # pos_patterns = [{"NP": ["NOUN", "PROPN"] - Maybe introduce Noun Phrase Extraction here
