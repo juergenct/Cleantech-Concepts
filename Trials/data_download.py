@@ -159,27 +159,27 @@ def download_brf_sum(link):
                 f.write(chunk)
     print(file_name + ' downloaded')
 
-# def download_desc(link):
-#     file_name = link.split('/')[-1]
-#     desc_dir = '/mnt/hdd01/patentsview/Description'
-#     print('Downloading ' + file_name)
-#     r = req.get(link, stream=True)
-#     with open(desc_dir + '/' + file_name, 'wb') as f:
-#         for chunk in r.iter_content(chunk_size=1024):
-#             if chunk:
-#                 f.write(chunk)
-#     print(file_name + ' downloaded')
+def download_desc(link):
+    file_name = link.split('/')[-1]
+    desc_dir = '/mnt/hdd01/patentsview/Description'
+    print('Downloading ' + file_name)
+    r = req.get(link, stream=True)
+    with open(desc_dir + '/' + file_name, 'wb') as f:
+        for chunk in r.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+    print(file_name + ' downloaded')
 
-# def download_claim(link):
-#     file_name = link.split('/')[-1]
-#     claim_dir = '/mnt/hdd01/patentsview/Claims'
-#     print('Downloading ' + file_name)
-#     r = req.get(link, stream=True)
-#     with open(claim_dir + '/' + file_name, 'wb') as f:
-#         for chunk in r.iter_content(chunk_size=1024):
-#             if chunk:
-#                 f.write(chunk)
-#     print(file_name + ' downloaded')
+def download_claim(link):
+    file_name = link.split('/')[-1]
+    claim_dir = '/mnt/hdd01/patentsview/Claims'
+    print('Downloading ' + file_name)
+    r = req.get(link, stream=True)
+    with open(claim_dir + '/' + file_name, 'wb') as f:
+        for chunk in r.iter_content(chunk_size=1024):
+            if chunk:
+                f.write(chunk)
+    print(file_name + ' downloaded')
 
 def unzip_file_brf_sum(file_path):
     print('Unzipping ' + file_path)
@@ -225,26 +225,26 @@ if __name__ == '__main__':
 
     print("Starting download...")
 
-    # pool_brf_sum = mp.Pool(mp.cpu_count()-2)
-    # pool_brf_sum.map(download_brf_sum, links_brf_sum)
-    # pool_brf_sum.close()
+    pool_brf_sum = mp.Pool(mp.cpu_count()-2)
+    pool_brf_sum.map(download_brf_sum, links_brf_sum)
+    pool_brf_sum.close()
 
-    # pool_desc = mp.Pool(mp.cpu_count()-2)
-    # pool_desc.map(download_desc, links_description)
-    # pool_desc.close()
+    pool_desc = mp.Pool(mp.cpu_count()-2)
+    pool_desc.map(download_desc, links_description)
+    pool_desc.close()
 
-    # pool_claim = mp.Pool(mp.cpu_count()-2)
-    # pool_claim.map(download_claim, links_claims)
-    # pool_claim.close()
+    pool_claim = mp.Pool(mp.cpu_count()-2)
+    pool_claim.map(download_claim, links_claims)
+    pool_claim.close()
 
     print("Files downloaded successfully.")
 
-    # print("Starting unzipping...")
+    print("Starting unzipping...")
 
-    # # Get all files in the directories ending with ".zip"
-    # zip_files_brf_sum = [os.path.join(brf_sum_dir, file) for file in os.listdir(brf_sum_dir) if file.endswith(".zip")]
-    # zip_files_desc = [os.path.join(desc_dir, file) for file in os.listdir(desc_dir) if file.endswith(".zip")]
-    # zip_files_claim = [os.path.join(claim_dir, file) for file in os.listdir(claim_dir) if file.endswith(".zip")]
+    # Get all files in the directories ending with ".zip"
+    zip_files_brf_sum = [os.path.join(brf_sum_dir, file) for file in os.listdir(brf_sum_dir) if file.endswith(".zip")]
+    zip_files_desc = [os.path.join(desc_dir, file) for file in os.listdir(desc_dir) if file.endswith(".zip")]
+    zip_files_claim = [os.path.join(claim_dir, file) for file in os.listdir(claim_dir) if file.endswith(".zip")]
 
     pool_brf_sum_zip = mp.Pool(mp.cpu_count()-2)
     pool_brf_sum_zip.map(unzip_file_brf_sum, zip_files_brf_sum)
@@ -258,4 +258,4 @@ if __name__ == '__main__':
     pool_claim_zip.map(unzip_file_claim, zip_files_claim)
     pool_claim_zip.close()
 
-    # print("Files unzipped successfully.")
+    print("Files unzipped successfully.")
