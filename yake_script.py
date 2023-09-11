@@ -5,10 +5,10 @@ import yake
 # Import test data
 df = pd.read_csv('/Users/juergenthiesen/Documents/Patentsview/Cleantech Concepts/df_sample_keyphrase.csv')
 
-# Concatenate abstracts for same value in 'cpc_subgroup' column
+# Concatenate abstracts for same value in 'cpc_subgroup' column - SHOULD I REALLY DO THIS???
 df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
-# Remove duplicate rows on 'cpc_subgroup' column
-df = df.drop_duplicates(subset=['cpc_subgroup'])
+# # Remove duplicate rows on 'cpc_subgroup' column
+# df = df.drop_duplicates(subset=['cpc_subgroup'])
 
 # Specify custom parameters
 language = "en"
