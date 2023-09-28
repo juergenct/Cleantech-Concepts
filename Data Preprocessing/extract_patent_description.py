@@ -4,17 +4,18 @@ from tqdm import tqdm
 
 # Load Fulltext Data
 # Get all .tsv files in directory
-path = 'path/to/data/Description'
+path = '/mnt/hdd01/patentsview/Description/'
 files = os.listdir(path)
 files_tsv = [f for f in files if f[-3:] == 'tsv']
 
 # Load Patent Data
-df_patent_id = pd.read_csv('path/to/data/g_patent_ids_rel_on_science_cleantech.csv')
+df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_ids_patentsview_cleantech.csv')
+print(len(df_patent_id))
 df_patent_id['patent_id'] = df_patent_id['patent_id'].astype(str)
 df_patent_desc_list = []
 
 for file in tqdm(files_tsv):
-    df_desc = pd.read_csv(path + file, sep='\t', header=0)
+    df_desc = pd.read_csv(path + file, sep='\t', header=0, engine='python', on_bad_lines='skip')
     df_desc['patent_id'] = df_desc['patent_id'].astype(str)
     # Sort df_desc by patent_id
     df_desc.sort_values(by=['patent_id'], inplace=True)
@@ -32,4 +33,4 @@ df_patent_desc = pd.concat(df_patent_desc_list)
 df_patent_desc_grouped = df_patent_desc.groupby('patent_id').apply(lambda x: {'description_text': x['description_text'].iloc[0], 'description_length': x['description_length'].iloc[0]}).reset_index(name='description')
 
 # Save to json
-df_patent_desc_grouped.to_json('path/to/data/g_detail_desc_text_2000.json', orient='records')
+df_patent_desc_grouped.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_description_cleantech.json', orient='records')

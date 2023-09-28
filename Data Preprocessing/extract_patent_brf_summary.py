@@ -4,12 +4,12 @@ from tqdm import tqdm
 
 # Load Fulltext Data
 # Get all .tsv files in directory
-path = '/path/to/data/Brief Summary'
+path = '/mnt/hdd01/patentsview/Brief Summary/'
 files = os.listdir(path)
 files_tsv = [f for f in files if f[-3:] == 'tsv']
 
 # Load Patent Data
-df_patent_id = pd.read_csv('/path/to/data/g_patent_ids_rel_on_science_cleantech.csv')
+df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_ids_patentsview_cleantech.csv')
 df_patent_id['patent_id'] = df_patent_id['patent_id'].astype(str)
 df_patent_brf_summary_list = []
 
@@ -29,4 +29,4 @@ for file in tqdm(files_tsv):
 df_patent_brf_summary = pd.concat(df_patent_brf_summary_list)
 
 # Save to json
-df_patent_brf_summary.to_json('/path/to/data/g_patent_brf_summary_cleantech.json', orient='records')
+df_patent_brf_summary.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech.json', orient='records')

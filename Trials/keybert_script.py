@@ -2,19 +2,17 @@ import os
 import pandas as pd
 from keybert import KeyBERT
 
-# Import test data
-df = pd.read_csv('/Users/juergenthiesen/Documents/Patentsview/Cleantech Concepts/df_sample_keyphrase.csv')
+# Import data
+df = pd.read_json('/path/to/json/file')
 
-# Import test data
-df = pd.read_csv('/Users/juergenthiesen/Documents/Patentsview/Cleantech Concepts/df_sample_keyphrase.csv')
-
-# Concatenate abstracts for same value in 'cpc_subgroup' column - SHOULD I REALLY DO THIS???
-df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
+# Concatenate abstracts for same value in 'cpc_subgroup' column 
+# df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
 # # Remove duplicate rows on 'cpc_subgroup' column
 # df = df.drop_duplicates(subset=['cpc_subgroup'])
 
-# Initialize YAKE model
-kw_model = KeyBERT(model='climatebert/distilroberta-base-climate-f')
+# Initialize KeyBERT model
+# kw_model = KeyBERT(model='climatebert/distilroberta-base-climate-f')
+kw_model =KeyBERT(model='AI-Growth-Lab/PatentSBERTa')
 
 # Iterate over rows in dataframe
 # Try out with MMR and rather high diversity 0.7, might try with lower diversity
