@@ -41,7 +41,7 @@ for index, row in tqdm(df.iterrows()):
     df.loc[index, 'keywords_yake'] = ', '.join(keywords_list)
 
 # Drop column 'description'
-df = df.drop(columns=['description'])
+# df = df.drop(columns=['description'])
 
 # Save dataframe to json
 df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech_yake.json', orient='records')

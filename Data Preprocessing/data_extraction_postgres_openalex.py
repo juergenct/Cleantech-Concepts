@@ -46,6 +46,9 @@ query = '''
 # Execute query
 result = pd.read_sql(query, engine)
 
+# Delete all empty rows in column abstract_inverted_index with value None
+result = result[result['abstract_inverted_index'].notna()]
+
 # Iterate over abstract_inverted_index column
 for index, row in tqdm(result.iterrows()):
     word_index = []
@@ -53,14 +56,16 @@ for index, row in tqdm(result.iterrows()):
         for key, value in row['abstract_inverted_index'].items():
             if key == 'InvertedIndex':
                 for innerkey, innervalue in value.items():
-                    for index in innervalue:
-                        word_index.append([innerkey, index])
+                    for innerindex in innervalue:
+                        word_index.append([innerkey, innerindex])
         # Sort list by index
         word_index.sort(key=lambda x: x[1])
         # Join first element of each list in word_index
         abstract = ' '.join([i[0] for i in word_index])
         # Add column abstract to result dataframe
-        result.loc[index, 'abstract'] = abstract
+        # result.loc[index, 'abstract'] = abstract
+        result.at[index, 'abstract'] = abstract
+        # print(result.loc[index, 'abstract'])
     except AttributeError:
         continue
 
