@@ -1,18 +1,17 @@
 import os
 import pandas as pd
+# import modin.pandas as pd
 import yake
 from tqdm import tqdm
 
 # Import test data
 df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech.json')
 
+# Drop column 'keywords_yake'
+# df = df.drop(columns=['keywords_yake'])
+
 # Concatenate 'patent_title' and 'patent_abstract' columns
 # df['patent_title_abstract'] = df['patent_title'] + ' ' + df['patent_abstract']
-
-# Concatenate abstracts for same value in 'cpc_subgroup' column
-# df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
-# # Remove duplicate rows on 'cpc_subgroup' column
-# df = df.drop_duplicates(subset=['cpc_subgroup'])
 
 # Specify custom parameters
 language = "en"
@@ -27,21 +26,15 @@ kw_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size, dedupLim=de
                                     dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
                                     features=None)
 
+# Initialize keywords_yake column
+df['keywords_yake'] = ''
+
 # Iterate over rows in dataframe
 for index, row in tqdm(df.iterrows()):
     # Extract keywords
     keywords = kw_extractor.extract_keywords(row['summary_text'])
-    # Create empty list
-    keywords_list = []
-    # Iterate over keywords
-    for kw in keywords:
-        # Append keywords to list
-        keywords_list.append(kw[0])
-    # Create new column with keywords
-    df.loc[index, 'keywords_yake'] = ', '.join(keywords_list)
-
-# Drop column 'description'
-# df = df.drop(columns=['description'])
+    # Set dataframe to corresponding row in original dataframe
+    df.at[index, 'keywords_yake'] = [keywords]
 
 # Save dataframe to json
 df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech_yake.json', orient='records')

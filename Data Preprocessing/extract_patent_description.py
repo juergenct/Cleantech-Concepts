@@ -1,36 +1,42 @@
 import os
+import csv
 import pandas as pd
 from tqdm import tqdm
 
-# Load Fulltext Data
-# Get all .tsv files in directory
-path = '/mnt/hdd01/patentsview/Description/'
-files = os.listdir(path)
-files_tsv = [f for f in files if f[-3:] == 'tsv']
+# Function to process chunks
+def process_chunk(chunk, df_patent_id):
+    chunk['patent_id'] = chunk['patent_id'].astype(str)
+    merged_chunk = chunk.merge(df_patent_id, on='patent_id', how='right', validate='many_to_one')
+    merged_chunk.dropna(subset=['description_text'], inplace=True)
+    return merged_chunk
+
 
 # Load Patent Data
 df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_ids_patentsview_cleantech.csv')
-print(len(df_patent_id))
 df_patent_id['patent_id'] = df_patent_id['patent_id'].astype(str)
-df_patent_desc_list = []
+
+# Get all .tsv.zip files in directory
+path = '/mnt/hdd01/patentsview/Description/'
+files_tsv = [os.path.join(path, file) for file in os.listdir(path) if '.tsv.zip' in file]
+file_years = [file.rsplit('_', 1)[-1].replace('.tsv.zip', '') for file in files_tsv]
+
+# Only include the following years
+# incl_years = ['2018']
+
+# Include the files by incl_years
+# files_tsv = [file for file in files_tsv if file_years[files_tsv.index(file)] in incl_years]
 
 for file in tqdm(files_tsv):
-    df_desc = pd.read_csv(path + file, sep='\t', header=0, engine='python', on_bad_lines='skip')
-    df_desc['patent_id'] = df_desc['patent_id'].astype(str)
-    # Sort df_desc by patent_id
-    df_desc.sort_values(by=['patent_id'], inplace=True)
-    # Match df_patent_id and df_desc on patent_id
-    df_patent_desc = df_desc.merge(df_patent_id, on='patent_id', how='right', validate='many_to_one')
-    # Delete Rows with only Null value in 'description_text'
-    df_patent_desc.dropna(subset=['description_text'], inplace=True)
-    # Concatenate df_patent_desc to df_patent_desc_list
-    df_patent_desc_list.append(df_patent_desc)
-
-# Concatenate all df_patent_desc in df_patent_desc
-df_patent_desc = pd.concat(df_patent_desc_list)
-
-# Add nested dictionary structure
-df_patent_desc_grouped = df_patent_desc.groupby('patent_id').apply(lambda x: {'description_text': x['description_text'].iloc[0], 'description_length': x['description_length'].iloc[0]}).reset_index(name='description')
-
-# Save to json
-df_patent_desc_grouped.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_description_cleantech.json', orient='records')
+    try:
+        df_patent_desc_list = []
+        df_patent_desc_temp = pd.read_csv(file, compression='zip', sep='\t', on_bad_lines='warn') #, quoting=csv.QUOTE_NONNUMERIC)
+        df_patent_desc_list.append(process_chunk(df_patent_desc_temp, df_patent_id))
+        # Concatenate all df_patent_desc in df_patent_desc
+        df_patent_desc = pd.concat(df_patent_desc_list)
+        # Group and Create nested dictionary structure
+        df_patent_desc_grouped = df_patent_desc.groupby('patent_id').apply(lambda x: {'description_text': x['description_text'].iloc[0], 'description_length': x['description_length'].iloc[0]}).reset_index(name='description')
+        # Save to json
+        df_patent_desc_grouped.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_description_cleantech_' + str(file.rsplit('_', 1)[-1].replace('.tsv.zip', '')) + '.json', orient='records')
+    except:
+        print(file)
+        continue

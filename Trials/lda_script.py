@@ -6,21 +6,20 @@ from nltk.tokenize import word_tokenize
 from gensim import corpora, models
 
 # Import test data
-df = pd.read_csv('/Users/juergenthiesen/Documents/Patentsview/Cleantech Concepts/df_sample_keyphrase.csv')
+df = pd.read_json('/home/thiesen/Documents/Cleantech_Concepts/g_patent_claims_cleantech_test.json')
 
 # Concatenate abstracts for the same value in the 'cpc_subgroup' column - SHOULD I REALLY DO THIS??
-df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
+# df = df.groupby('cpc_subgroup')['patent_abstract'].apply(' '.join).reset_index()
 # # Remove duplicate rows on the 'cpc_subgroup' column
 # df = df.drop_duplicates(subset=['cpc_subgroup'])
 
-# Set up NLTK stopwords
-nltk.download('stopwords')
+# Set up NLTK stopwords - if required download nltk packages
 stop_words = set(stopwords.words('english'))
 
 # Tokenize and preprocess the text
 texts = []
 for index, row in df.iterrows():
-    tokens = word_tokenize(row['patent_abstract'])
+    tokens = word_tokenize(row['claim_fulltext'])
     tokens = [token.lower() for token in tokens if token.isalpha() and token.lower() not in stop_words]
     texts.append(tokens)
 
@@ -34,7 +33,7 @@ lda_model = models.LdaModel(corpus, num_topics=10, id2word=dictionary, passes=10
 # Extract keywords from the LDA model
 keywords_list = []
 for index, row in df.iterrows():
-    tokens = word_tokenize(row['patent_abstract'])
+    tokens = word_tokenize(row['claim_fulltext'])
     tokens = [token.lower() for token in tokens if token.isalpha() and token.lower() not in stop_words]
     bow = dictionary.doc2bow(tokens)
     topic_distribution = lda_model.get_document_topics(bow)
@@ -45,4 +44,4 @@ for index, row in df.iterrows():
 df['keywords'] = keywords_list
 
 # Save dataframe to JSON
-df.to_json('/Users/juergenthiesen/Documents/Patentsview/Cleantech Concepts/LDA/df_sample_keyphrase.json')
+df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/Cleantech Concepts/LDA/g_patent_claims_cleantech_lda_test.json', orient='records')
