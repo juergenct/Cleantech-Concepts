@@ -10,7 +10,7 @@ df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/Cleant
 # df = df.drop_duplicates(subset=['cpc_subgroup'])
 
 # Initialize RAKE model
-rake_extractor = Rake()
+rake_extractor = Rake(min_length=2, max_length=3)
 
 # Iterate over rows in dataframe
 for index, row in df.iterrows():
