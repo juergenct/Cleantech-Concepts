@@ -5,7 +5,7 @@ import yake
 from tqdm import tqdm
 
 # Import test data
-df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech.json')
+df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json')
 
 # Drop column 'keywords_yake'
 # df = df.drop(columns=['keywords_yake'])
@@ -32,9 +32,9 @@ df['keywords_yake'] = ''
 # Iterate over rows in dataframe
 for index, row in tqdm(df.iterrows()):
     # Extract keywords
-    keywords = kw_extractor.extract_keywords(row['summary_text'])
+    keywords = kw_extractor.extract_keywords(row['claim_fulltext'])
     # Set dataframe to corresponding row in original dataframe
     df.at[index, 'keywords_yake'] = [keywords]
 
 # Save dataframe to json
-df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_brf_summary_cleantech_yake.json', orient='records')
+df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_cleantech_yake.json', orient='records')
