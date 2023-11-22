@@ -25,51 +25,36 @@ def initialize_yake():
 def extract_and_filter(row):
     try:
         kw_extractor = initialize_yake()
-
-        # Extract keywords with YAKE
         unfiltered_keywords = kw_extractor.extract_keywords(row['abstract'])
-
-        # Process text with Spacy
         doc = nlp(row['abstract'])
-
-        # Get noun chunks as a set
         noun_chunks = {chunk.text.strip().lower() for chunk in doc.noun_chunks}
-
-        # Filter keywords based on whether they are contained within any of the noun_chunks
         filtered_keywords = [(keyword, score) for keyword, score in unfiltered_keywords if any(keyword.lower() in noun_chunk for noun_chunk in noun_chunks)]
-
         return unfiltered_keywords, filtered_keywords
     except:
         return '', ''
 
+def process_chunk(chunk):
+    num_cores = min(12, cpu_count())
+    with Pool(num_cores) as pool:
+        results = pool.map(extract_and_filter, [row for _, row in chunk.iterrows()])
+    return results
 
 def main():
-    # Import test data
-    # df = pd.read_json('/mnt/hdd01/patentsview/Reliance on Science - Cleantech Patents/df_oaid_Cleantech_Y02_individual_works.json')
-    df = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech.csv', index_col=0)
+    chunk_size = 10000  # Adjust chunk size based on your system's capabilities
+    total_rows = sum(1 for _ in open('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech.csv', 'r')) - 1  # Adjust file path
+    reader = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech.csv', index_col=0, chunksize=chunk_size)
 
-    # Delete all rows except 'id', 'doi', 'title', 'abstract', 'oaid', 'patent', 'full_oaid'
-    df = df[['id', 'doi', 'title', 'abstract', 'oaid', 'patent', 'full_oaid']]
+    processed_data = []
+    with tqdm(total=total_rows) as pbar:
+        for chunk in reader:
+            chunk['abstract'] = chunk['abstract'].astype(str)
+            chunk_results = process_chunk(chunk)
+            processed_data.extend(chunk_results)
+            pbar.update(chunk_size)
 
-    # Cast column 'abstract' to string
-    df['abstract'] = df['abstract'].astype(str)
-
-    # Set up multiprocessing
-    num_cores = min(12, cpu_count())
-    pool = Pool(num_cores)
-
-    # Apply the function in parallel
-    results = list(tqdm(pool.imap(extract_and_filter, [row for _, row in df.iterrows()]), total=len(df)))
-
-    # Split results into separate columns
-    df['keywords_yake_claim'], df['keywords_yake_claim_noun_chunk'] = zip(*results)
-
-    # Save dataframe to json
-    # df.to_json('/mnt/hdd01/patentsview/Reliance on Science - Cleantech Patents/df_oaid_Cleantech_y02_individual_works_yake_noun_chunks.json', orient='records')
+    # Convert processed data to DataFrame and save
+    df = pd.DataFrame(processed_data, columns=['keywords_yake_claim', 'keywords_yake_claim_noun_chunk'])
     df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech_yake_noun_chunks.json', orient='records')
-
-    pool.close()
-    pool.join()
 
 if __name__ == '__main__':
     main()

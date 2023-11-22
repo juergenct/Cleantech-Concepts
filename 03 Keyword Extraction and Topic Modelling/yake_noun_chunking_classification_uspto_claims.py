@@ -44,10 +44,11 @@ def extract_and_filter(row):
 
 def main():
     # Import test data
-    df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json')
+    # df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json')
+    df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_claims_fulltext.json')
 
     # Set up multiprocessing
-    num_cores = min(6, cpu_count())
+    num_cores = min(12, cpu_count())
     pool = Pool(num_cores)
 
     # Cast column 'claim_fulltext' to string
@@ -60,7 +61,8 @@ def main():
     df['keywords_yake_claim'], df['keywords_yake_claim_noun_chunk'] = zip(*results)
 
     # Save dataframe to json
-    df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_cleantech_yake_noun_chunks.json', orient='records')
+    # df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_cleantech_yake_noun_chunks.json', orient='records')
+    df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_claims_fulltext_yake_noun_chunks.json', orient='records')
 
     pool.close()
     pool.join()

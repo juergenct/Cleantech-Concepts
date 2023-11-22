@@ -1,11 +1,12 @@
-import os
+# import os
 import pandas as pd
 import re
 from tqdm import tqdm
 tqdm.pandas()
 
 # Read in the data
-df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json', orient='records')
+# df = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json', orient='records')
+df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_claims.json')
 
 def process_row(row):
     claim_fulltext = ''
@@ -25,4 +26,5 @@ df[['claim_fulltext']] = df.progress_apply(process_row, axis=1)
 del df['claims']
 
 # Save the DataFrame to json
-df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json', orient='records')
+# df.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_fulltext_cleantech.json', orient='records')
+df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_claims_fulltext.json', orient='records')

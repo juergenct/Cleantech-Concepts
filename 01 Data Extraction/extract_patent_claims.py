@@ -4,12 +4,13 @@ from tqdm import tqdm
 
 # Load Fulltext Data
 # Get all .tsv files in directory
-path = '/mnt/hdd01/patentsview/Claims/'
+path = '/mnt/hdd01/patentsview/Fulltext Data/Claims/'
 files = os.listdir(path)
 files_tsv = [f for f in files if f[-3:] == 'tsv']
 
 # Load Patent Data
-df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_ids_patentsview_cleantech.csv')
+# df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_ids_patentsview_cleantech.csv')
+df_patent_id = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_ids.csv')
 df_patent_id['patent_id'] = df_patent_id['patent_id'].astype(str)
 df_patent_claims_list = []
 
@@ -44,4 +45,5 @@ df_patent_claims_grouped['claims'] = df_patent_claims_grouped.apply(lambda row: 
 df_patent_claims_grouped.drop(['claim_sequence', 'claim_text', 'dependent', 'claim_number', 'exemplary'], axis=1, inplace=True)
 
 # Save to json
-df_patent_claims_grouped.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_cleantech.json', orient='records')
+# df_patent_claims_grouped.to_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/g_patent_claims_cleantech.json', orient='records')
+df_patent_claims_grouped.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_claims.json', orient='records')

@@ -44,16 +44,17 @@ def extract_and_filter(row):
 
 def main():
     # Import test data
-    df = pd.read_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned.json')
+    # df = pd.read_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned.json')
+    df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned.json')
 
     # Drop all columns except 'publn_nr', 'CLAIM', 'TITLE', 'appln_id', 'cpc_class_symbol', 'cleaned_claims'
-    df = df[['publn_nr', 'CLAIM', 'TITLE', 'appln_id', 'cpc_class_symbol', 'cleaned_claims']]
+    # df = df[['publn_nr', 'CLAIM', 'TITLE', 'appln_id', 'cpc_class_symbol', 'cleaned_claims']]
 
     # Cast column 'cleaned_claims' to string
     df['cleaned_claims'] = df['cleaned_claims'].astype(str)
 
     # Set up multiprocessing
-    num_cores = min(6, cpu_count())
+    num_cores = min(12, cpu_count())
     pool = Pool(num_cores)
 
     # Apply the function in parallel
@@ -63,7 +64,8 @@ def main():
     df['keywords_yake_claim'], df['keywords_yake_claim_noun_chunk'] = zip(*results)
 
     # Save dataframe to json
-    df.to_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned_yake_noun_chunks.json', orient='records')
+    # df.to_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned_yake_noun_chunks.json', orient='records')
+    df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned_yake_noun_chunks.json', orient='records')
 
     pool.close()
     pool.join()
