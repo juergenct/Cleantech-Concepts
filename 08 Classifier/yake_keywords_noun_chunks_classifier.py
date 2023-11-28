@@ -25,7 +25,8 @@ similarity_dir = '/mnt/hdd01/patentsview/Similarity Search - CPC Classification 
 similarity_files = glob.glob(similarity_dir + '*.json')
 
 # Co-Occurrence Threshold
-co_occurrence_threshold = [0.01, 0.025, 0.05, 0.1, 0.15]
+# co_occurrence_threshold = [0.01, 0.025, 0.05, 0.1, 0.15]
+co_occurrence_threshold = [0.1]
 
 # Result Dataframe
 df_results_svc = pd.DataFrame()
@@ -50,65 +51,68 @@ df_non_cleantech_raw['keyword_yake_lemma_bertforpatents_embedding'] = model_bert
 for co_file in co_occurrence_files:
     for sim_file in similarity_files:
         for co_threshold in co_occurrence_threshold:
-            try:
-                print(f"Co-Occurrence File: {co_file}")
-                print(f"Similarity File: {sim_file}")
-                print(f"Co-Occurrence Threshold: {co_threshold}")
-                # Import Cleantech data
-                df_cleantech_similarity = pd.read_json(sim_file)
-                df_cleantech_cooccurrence = pd.read_csv(co_file, index_col=0)
-                # Delete all rows where all values are NaN
-                df_cleantech_cooccurrence.dropna(how='all', inplace=True)
+            # try:
+            print(f"Co-Occurrence File: {co_file}")
+            print(f"Similarity File: {sim_file}")
+            print(f"Co-Occurrence Threshold: {co_threshold}")
+            # Import Cleantech data
+            df_cleantech_similarity = pd.read_json(sim_file)
+            df_cleantech_cooccurrence = pd.read_csv(co_file, index_col=0)
+            # Delete all rows where all values are NaN
+            df_cleantech_cooccurrence.dropna(how='all', inplace=True)
 
-                # Get boolean mask where any value in column is greater than or equal to co_threshold
-                mask = (df_cleantech_cooccurrence >= co_threshold).any()
-                # Apply mask to columns and convert to list
-                co_occurrence_list = df_cleantech_cooccurrence.columns[mask].tolist()
-                # Drop duplicates
-                co_occurrence_list = list(dict.fromkeys(co_occurrence_list))
+            # Get boolean mask where any value in column is greater than or equal to co_threshold
+            mask = (df_cleantech_cooccurrence >= co_threshold).any()
+            # Apply mask to columns and convert to list
+            co_occurrence_list = df_cleantech_cooccurrence.columns[mask].tolist()
+            # Drop duplicates
+            co_occurrence_list = list(dict.fromkeys(co_occurrence_list))
 
-                # Concatenate the two columns into a single Series
-                similarity_series = pd.concat([df_cleantech_similarity['keyword_yake_lemma'], df_cleantech_similarity['keywords_bertforpatents'].explode()], ignore_index=True)
-                # Drop duplicates and convert to list
-                similarity_list = similarity_series.drop_duplicates().tolist()
+            # Concatenate the two columns into a single Series
+            similarity_series = pd.concat([df_cleantech_similarity['keyword_yake_lemma'], df_cleantech_similarity['keywords_bertforpatents'].explode()], ignore_index=True)
+            # Drop duplicates and convert to list
+            similarity_list = similarity_series.drop_duplicates().tolist()
 
-                cleantech_list = co_occurrence_list + similarity_list
-                # Drop duplicates
-                cleantech_list = list(dict.fromkeys(cleantech_list))
-                df_cleantech = pd.DataFrame(cleantech_list, columns=['keyword_yake_lemma'])
-                df_cleantech['cleantech'] = 1
-                df_cleantech['keyword_yake_lemma_bertforpatents_embedding'] = model_bertforpatents.encode(df_cleantech['keyword_yake_lemma'].tolist()).tolist()
+            cleantech_list = co_occurrence_list + similarity_list
+            # Drop duplicates
+            cleantech_list = list(dict.fromkeys(cleantech_list))
+            df_cleantech = pd.DataFrame(cleantech_list, columns=['keyword_yake_lemma'])
+            df_cleantech['cleantech'] = 1
+            df_cleantech = df_cleantech[df_cleantech['keyword_yake_lemma'].apply(lambda x: isinstance(x, str))]
+            df_cleantech['keyword_yake_lemma_bertforpatents_embedding'] = model_bertforpatents.encode(df_cleantech['keyword_yake_lemma'].tolist()).tolist()
 
-                print(f"Number of Cleantech Keywords: {len(df_cleantech)}")
+            print(f"Number of Cleantech Keywords: {len(df_cleantech)}")
 
-                # Randomly sample non-cleantech data, len = len(cleantech)
-                df_non_cleantech = df_non_cleantech_raw.sample(n=len(df_cleantech), random_state=42)
+            # df_cleantech.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/cleantech_keywords_similarity_015_co_occurrence_01.json', orient='records')
 
-                # Concatenate dataframes
-                df = pd.concat([df_cleantech, df_non_cleantech], ignore_index=True)
+            # Randomly sample non-cleantech data, len = len(cleantech)
+            df_non_cleantech = df_non_cleantech_raw.sample(n=len(df_cleantech), random_state=42)
 
-                ### Perform Classification
-                # Train-test split
-                X_train, X_test, y_train, y_test = train_test_split(df['keyword_yake_lemma_bertforpatents_embedding'], df['cleantech'], test_size=0.2, shuffle=True, random_state=42)
+            # Concatenate dataframes
+            df = pd.concat([df_cleantech, df_non_cleantech], ignore_index=True)
 
-                # Convert to numpy array
-                X_train = np.array(X_train.tolist())
-                X_test = np.array(X_test.tolist())
+            ### Perform Classification
+            # Train-test split
+            X_train, X_test, y_train, y_test = train_test_split(df['keyword_yake_lemma_bertforpatents_embedding'], df['cleantech'], test_size=0.2, shuffle=True, random_state=42)
 
-                # Train SVM
-                clf = SVC(random_state=42, cache_size=10000)
-                clf.fit(X_train, y_train)
+            # Convert to numpy array
+            X_train = np.array(X_train.tolist())
+            X_test = np.array(X_test.tolist())
 
-                # Create new row
-                new_row = {'co_occurrence_file': co_file, 'similarity_file': sim_file, 'co_occurrence_threshold': co_threshold, 'classification_report': classification_report(y_test, clf.predict(X_test), output_dict=True), 'len_cleantech': len(df_cleantech), 'len_similarity_list': len(similarity_list), 'len_co_occurrence_list': len(co_occurrence_list)}
-                # Append row to the dataframe
-                df_results_svc = pd.concat([df_results_svc, pd.DataFrame([new_row])], ignore_index=True)
+            # Train SVM
+            clf = SVC(random_state=42, cache_size=10000)
+            clf.fit(X_train, y_train)
 
-                # print(df_results_svc)
-                # Print classification report
-                print(classification_report(y_test, clf.predict(X_test)))
-            except:
-                print(f"Error: {co_file}, {sim_file}, {co_threshold}")
+            # Create new row
+            new_row = {'co_occurrence_file': co_file, 'similarity_file': sim_file, 'co_occurrence_threshold': co_threshold, 'classification_report': classification_report(y_test, clf.predict(X_test), output_dict=True), 'len_cleantech': len(df_cleantech), 'len_similarity_list': len(similarity_list), 'len_co_occurrence_list': len(co_occurrence_list)}
+            # Append row to the dataframe
+            df_results_svc = pd.concat([df_results_svc, pd.DataFrame([new_row])], ignore_index=True)
+
+            # print(df_results_svc)
+            # Print classification report
+            print(classification_report(y_test, clf.predict(X_test)))
+            # except:
+            #     print(f"Error: {co_file}, {sim_file}, {co_threshold}")
 
 # Save results
 df_results_svc.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/svc_classification_cleantech_dictionary.json', orient='records')
