@@ -25,8 +25,8 @@ similarity_dir = '/mnt/hdd01/patentsview/Similarity Search - CPC Classification 
 similarity_files = glob.glob(similarity_dir + '*.json')
 
 # Co-Occurrence Threshold
-# co_occurrence_threshold = [0.01, 0.025, 0.05, 0.1, 0.15]
-co_occurrence_threshold = [0.1]
+co_occurrence_threshold = [0.01, 0.025, 0.05, 0.1, 0.15]
+# co_occurrence_threshold = [0.1]
 
 # Result Dataframe
 df_results_svc = pd.DataFrame()
@@ -84,7 +84,7 @@ for co_file in co_occurrence_files:
 
                 print(f"Number of Cleantech Keywords: {len(df_cleantech)}")
 
-                df_cleantech.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/cleantech_keywords_similarity_015_co_occurrence_01.json', orient='records')
+                # df_cleantech.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/cleantech_keywords_similarity_015_co_occurrence_01.json', orient='records')
 
                 # Randomly sample non-cleantech data, len = len(cleantech)
                 df_non_cleantech = df_non_cleantech_raw.sample(n=len(df_cleantech), random_state=42)
@@ -115,4 +115,4 @@ for co_file in co_occurrence_files:
                 print(f"Error: {co_file}, {sim_file}, {co_threshold}")
 
 # Save results
-# df_results_svc.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/svc_classification_cleantech_dictionary_neighbors_and_radius.json', orient='records')
+df_results_svc.to_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/svc_classification_cleantech_dictionary_neighbors_and_radius.json', orient='records')
