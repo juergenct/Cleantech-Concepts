@@ -5,11 +5,12 @@ from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from gensim import corpora, models
+from gensim.models import Phrases
 from multiprocessing import Pool
 import multiprocessing
 from tqdm import tqdm
 
-# Download necessary NLTK data
+# # Download necessary NLTK data
 # nltk.download('wordnet')
 # nltk.download('averaged_perceptron_tagger')
 # nltk.download('stopwords')
@@ -34,33 +35,45 @@ def preprocess_text(text):
 
 # Function to process data with multiprocessing
 def process_data_parallel(data_texts):
-    with Pool(12) as pool:  # Using xx processes
+    with Pool(min(multiprocessing.cpu_count(), 12)) as pool:
         processed_texts = list(tqdm(pool.imap(preprocess_text, data_texts), total=len(data_texts)))
     return processed_texts
-
-# Initialize dictionary and corpus
-dictionary = corpora.Dictionary()
-corpus = []
 
 # Path to the data file
 file_path = '/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/Cleantech Concepts/LSA/df_epo_uspto_rel_cleantech.json'
 
 # Process the data
 data = pd.read_json(file_path)
-# Delete all rows of column 'text' that are not strings
 data = data[data['text'].apply(lambda x: isinstance(x, str))]
-# Reset index
 data = data.reset_index(drop=True)
-# Randomly sample x rows
-data = data.sample(n=250000, random_state=42)
-# Process the data
+# data = data.sample(n=500000, random_state=42)
+
+# Process the data and update the dictionary
 processed_texts = process_data_parallel(data['text'])
 
-# Update dictionary and create corpus
-for text in processed_texts:
-    dictionary.add_documents([text])
-    corpus_data = dictionary.doc2bow(text)
-    corpus.append(corpus_data)
+# Compute bigrams
+bigram = Phrases(processed_texts, min_count=20)
+for idx in range(len(processed_texts)):
+    for token in bigram[processed_texts[idx]]:
+        if '_' in token:
+            # Token is a bigram, add to document
+            processed_texts[idx].append(token)
+
+# Create a dictionary representation of the documents and filter extremes
+dictionary = corpora.Dictionary(processed_texts)
+dictionary.filter_extremes(no_below=5, no_above=0.5)
+
+# Create a streaming corpus
+class MyCorpus(object):
+    def __init__(self, texts, dictionary):
+        self.texts = texts
+        self.dictionary = dictionary
+
+    def __iter__(self):
+        for text in self.texts:
+            yield self.dictionary.doc2bow(text)
+
+corpus = MyCorpus(processed_texts, dictionary)
 
 # Perform Latent Semantic Analysis
 lsa_model = models.LsiModel(corpus, num_topics=10, id2word=dictionary)
