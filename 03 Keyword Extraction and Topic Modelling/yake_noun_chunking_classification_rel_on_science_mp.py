@@ -3,6 +3,7 @@ import re
 import nltk
 from nltk.stem import WordNetLemmatizer
 import pandas as pd
+import gcld3
 import yake
 import spacy
 import unicodedata
@@ -27,11 +28,17 @@ yake_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size, dedupLim=
                                  dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
                                  features=None)
 
+# Initialize language detector
+detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
+
 # Function to extract keywords and filter with noun chunks
 def extract_and_filter(row):
     try:
         if row['abstract'] is None:
             print("No claims found for oaid number: " + str(row['oaid']))
+            return [], []
+        if detector.FindLanguage(row['abstract']).language != 'en':
+            print("Non-English abstract found for oaid number: " + str(row['oaid']))
             return [], []
         
         # Normalize the text with unicodedata
@@ -63,7 +70,7 @@ def main():
     df['abstract'] = df['abstract'].astype(str)
 
     # Set up multiprocessing
-    num_cores = min(12, cpu_count())
+    num_cores = min(6, cpu_count())
     pool = Pool(num_cores)
 
     # Apply the function in parallel
@@ -73,7 +80,7 @@ def main():
     df['keywords_yake_claim'], df['keywords_yake_claim_noun_chunk'] = zip(*results)
 
     # Save dataframe to json
-    df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech_yake_noun_chunks.json', orient='records')
+    df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech_lang_detect_yake_noun_chunks.json', orient='records')
 
     pool.close()
     pool.join()

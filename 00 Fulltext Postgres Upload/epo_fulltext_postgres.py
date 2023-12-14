@@ -24,23 +24,23 @@ def process_upload_tsv(file_path):
     global errors  # Declare errors as a global variable
 
     # Read TSV file into DataFrame
-    df = pd.read_csv(file_path, compression='zip', sep='\t', header=0)
+    df = pd.read_csv(file_path, sep='\t', header=None, names=['appln_auth', 'epo_publn_nr', 'appln_kind', 'appln_date', 'appln_lng', 'appln_comp', 'appln_text_type', 'appln_text'])
 
-    # Cast patent_id column to string
-    df['patent_id'] = df['patent_id'].astype(str)
+    # Cast publn_nr column to string
+    df['epo_publn_nr'] = df['epo_publn_nr'].astype(str)
 
-    # For each row in df, match patent_id with publn_nr in tls211_pat_publn where publn_auth is "US"
+    # For each row in df, match publn_nr with publn_nr in tls211_pat_publn where publn_auth is "US"
     with engine.connect() as conn:
         for index, row in tqdm(df.iterrows(), total=len(df)):
             try:
-                patent_id = row['patent_id']
+                epo_publn_nr = row['epo_publn_nr']
                 # Use the text function to create an executable SQL object
                 query = text("""
                     SELECT appln_id FROM public.tls211_pat_publn
-                    WHERE publn_nr = :patent_id AND publn_auth = 'US'
+                    WHERE publn_nr = :epo_publn_nr AND publn_auth = 'EP'
                 """)
                 # Execute the query with parameters
-                result = conn.execute(query, {'patent_id': patent_id})
+                result = conn.execute(query, {'epo_publn_nr': epo_publn_nr})
                 appln_id = result.fetchone()
 
                 # Convert appln_id to string and remove everything after the dot including the dot
@@ -49,25 +49,25 @@ def process_upload_tsv(file_path):
                 if appln_id:
                     df.at[index, 'appln_id'] = appln_id[0]
             except Exception as e:
-                errors.append({'patent_id': patent_id, 'error': str(e)})
+                errors.append({'epo_publn_nr': epo_publn_nr, 'error': str(e)})
 
     # Create a new table or append to an existing table in the database
-    df['publn_auth'] = 'US'
-    df.to_sql('us_description', con=engine, if_exists='append', index=False)
+    df['publn_auth'] = 'EP'
+    df.to_sql('ep_fulltext_data', con=engine, if_exists='append', index=False)
 
     # Print the number of errors after processing this file
     print(f"Finished processing {file_path}. Number of errors: {len(errors)}. Number of successes: {len(df) - len(errors)}")
 
 # Directory containing your TSV files
-directory = '/mnt/hdd01/patentsview/Fulltext Data/Description'
+directory = '/mnt/hdd01/EP_Fulltext_Data'
 
 # Process each file
 for filename in os.listdir(directory):
-    if filename.endswith('.tsv.zip'):
+    if filename.endswith('.txt'):
         process_upload_tsv(os.path.join(directory, filename))
 
 print("Data upload complete.")
 
 # Save errors to a CSV file
 df_errors = pd.DataFrame(errors)
-df_errors.to_csv('/mnt/hdd01/patentsview/Fulltext Data/Description/PATSTAT_parsing_errors.csv', index=False)
+df_errors.to_csv('/mnt/hdd01/EP_Fulltext_Data/PATSTAT_fulltext_parsing_errors.csv', index=False)
