@@ -62,7 +62,7 @@ def clean_and_lemmatize(text):
     text = unicodedata.normalize("NFKD", text).encode('ASCII', 'ignore').decode('utf-8')
     text = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", text)
     text = re.sub(r"https?:\/\/\S+", "", text)
-    text = re.sub(r"[^a-zA-Z- ]", " ", text).lower().strip()
+    text = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", text)
     return ' '.join([lemmatizer.lemmatize(word) for word in text.split()])
 
 def make_wordtrie(keyword_list):

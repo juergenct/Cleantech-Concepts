@@ -91,7 +91,7 @@ def clean_and_lemmatize(text):
     # Remove URLs, brackets, and non-alphabetic characters; convert to lowercase
     text = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", text)
     text = re.sub(r"https?:\/\/\S+", "", text)
-    text = re.sub(r"[^a-zA-Z- ]", " ", text).lower().strip()
+    text = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", text)
     # Lemmatize each word
     lemmatized_text = ' '.join([lemmatizer.lemmatize(word) for word in text.split()])
     return lemmatized_text

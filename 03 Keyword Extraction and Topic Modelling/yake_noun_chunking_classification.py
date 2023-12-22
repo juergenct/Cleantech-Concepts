@@ -50,7 +50,7 @@ for index, row in tqdm(df.iterrows()):
         # row['title_lower'] = re.sub(r"[^a-zA-Z- ]|^https?:\/\/.*[\r\n]*|\[.*?\]|\(.*?\)|\{.*?\}", " ", row['title_lower']).lower().strip()
         row['title_lower'] = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", row['title_lower'])
         row['title_lower'] = re.sub(r"https?:\/\/\S+", "", row['title_lower'])
-        row['title_lower'] = re.sub(r"[^a-zA-Z- ]", " ", row['title_lower']).lower().strip()
+        row['title_lower'] = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", row['title_lower'])
         unfiltered_keywords = yake_extractor.extract_keywords(row['title_lower']) # Extract keywords using YAKE
         doc = nlp(row['title_lower'])
         noun_chunks = [chunk.text.strip().lower() for chunk in doc.noun_chunks]

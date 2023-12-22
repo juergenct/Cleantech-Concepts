@@ -39,7 +39,7 @@ def extract_and_filter(row):
         # row['cleaned_claims'] = re.sub(r"[^a-zA-Z- ]|^https?:\/\/.*[\r\n]*|\[.*?\]|\(.*?\)|\{.*?\}", " ", row['cleaned_claims']).lower().strip()
         row['cleaned_claims'] = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", row['cleaned_claims'])
         row['cleaned_claims'] = re.sub(r"https?:\/\/\S+", "", row['cleaned_claims'])
-        row['cleaned_claims'] = re.sub(r"[^a-zA-Z- ]", " ", row['cleaned_claims']).lower().strip()
+        row['cleaned_claims'] = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", row['cleaned_claims'])
         unfiltered_keywords = yake_extractor.extract_keywords(row['cleaned_claims']) # Extract keywords using YAKE
         doc = nlp(row['cleaned_claims'])
         noun_chunks = [chunk.text.strip().lower() for chunk in doc.noun_chunks]
