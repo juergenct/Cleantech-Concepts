@@ -8,12 +8,12 @@ tqdm.pandas()
 
 # Database connection details
 url_object = URL.create(
-    drivername='postgresql+psycopg2',
-    username='tie',
-    password='TIE%2023!tuhh',
-    host='134.28.58.100',
-    port=25432,
-    database='Patstat',
+    drivername='drivername',
+    username='username',
+    password='password',
+    host='host',
+    port=port,
+    database='db_name',
 )
 engine = create_engine(url_object) #, echo=True)
 
@@ -34,16 +34,13 @@ def process_upload_tsv(file_path):
         for index, row in tqdm(df.iterrows(), total=len(df)):
             try:
                 patent_id = row['patent_id']
-                # Use the text function to create an executable SQL object
                 query = text("""
                     SELECT appln_id FROM public.tls211_pat_publn
                     WHERE publn_nr = :patent_id AND publn_auth = 'US'
                 """)
-                # Execute the query with parameters
                 result = conn.execute(query, {'patent_id': patent_id})
                 appln_id = result.fetchone()
 
-                # Convert appln_id to string and remove everything after the dot including the dot
                 appln_id = str(appln_id[0]).split('.')[0] if appln_id else None
 
                 if appln_id:

@@ -1,5 +1,6 @@
 import re
-import os
+import time
+import random
 import pandas as pd
 import numpy as np
 import itertools
@@ -19,7 +20,7 @@ from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.feature_extraction.text import CountVectorizer
 
 lemmatizer = WordNetLemmatizer()
-MAX_ITER = 1
+MAX_ITER_DB = 1
 model = LogisticRegression(max_iter=1000)
 detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 nlp = spacy.load("en_core_web_lg")
@@ -69,7 +70,7 @@ def clean_text(text):
     text = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", text)
     return ' '.join([word for word in text.split()])
 
-def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports):
+def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports, confusion_matrix_list):
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
     print("Classification Report:\n", classification_report(y_test, predictions))
@@ -80,7 +81,8 @@ def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantec
     df_keywords_importance = pd.DataFrame(sorted_keywords, columns=['keyword_yake_lemma', f'logistic_regression_importance_iteration_{i}'])
     df_cleantech = pd.merge(df_cleantech, df_keywords_importance, on='keyword_yake_lemma', how='left')
     list_classification_reports.append(classification_report(y_test, predictions, output_dict=True))
-    return df_cleantech
+    confusion_matrix_list.append(confusion_matrix(y_test, predictions))
+    return df_cleantech, list_classification_reports, confusion_matrix_list
 
 def extract_yake_keywords(text):
     keyword_yake = yake_extractor.extract_keywords(text)
@@ -108,12 +110,12 @@ def postprocess_keyword_list(keyword_yake_noun_chunk):
 
 
 def process_text_parallel(df, column, function):
-    with mp.Pool(min(mp.cpu_count(), 12)) as pool:
+    with mp.Pool(min(mp.cpu_count(), 20)) as pool:
         results = pool.map(function, df[column])
     df[column] = results
     return df
 
- 
+timer = time.time()
 
 # Prepare Cleantech Data
 df_cleantech = pd.read_json('/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_keywords_list_agg_uspto_epo_rel_embeddings_noun_chunks.json')
@@ -121,10 +123,13 @@ df_cleantech.drop(columns=['keyword_yake_patentsberta_embedding', 'keyword_yake_
 cleantech_list = df_cleantech['keyword_yake_lemma'].tolist()
 patent_id_list = list(set(df_cleantech['patent_id'].explode().tolist()))
 patent_id_list = [x for x in patent_id_list if str(x) != 'nan']
+# patent_id_list = patent_id_list[:1000] # FOR TESTING PURPOSES ONLY
 publn_nr_list = list(set(df_cleantech['publn_nr'].explode().tolist()))
 publn_nr_list = [x for x in publn_nr_list if str(x) != 'nan']
+# publn_nr_list = publn_nr_list[:1000] # FOR TESTING PURPOSES ONLY
 oaid_list = list(set(df_cleantech['oaid'].explode().tolist()))
 oaid_list = [x for x in oaid_list if str(x) != 'nan']
+# oaid_list = oaid_list[:1000] # FOR TESTING PURPOSES ONLY
 
 Vectorizer = CountVectorizer(
     vocabulary = cleantech_list,
@@ -132,6 +137,9 @@ Vectorizer = CountVectorizer(
     stop_words='english',
     lowercase=True,
 )
+
+print(f"Finished preparing cleantech data in {time.time() - timer} seconds.")
+timer = time.time()
 
 # Concatenate patent_id_list and publn_nr_list and oaid_list to g_cleantech
 df_cleantech_patent_id_explode = df_cleantech.explode('patent_id')
@@ -158,12 +166,17 @@ df_cleantech_oaid_explode.reset_index(drop=True, inplace=True)
 g_cleantech = pd.concat([df_cleantech_patent_id_explode, df_cleantech_publn_nr_explode, df_cleantech_oaid_explode], ignore_index=True)
 g_cleantech_matrix = Vectorizer.transform(g_cleantech['text'])
 
+print(f"Finished preparing cleantech data in {time.time() - timer} seconds.")
+timer = time.time()
+
 del df_cleantech_patent_id_explode, df_cleantech_publn_nr_explode, df_cleantech_oaid_explode
 
 list_classification_reports = []
+confusion_matrix_list = []
 
-for i in range(MAX_ITER):
-    print(f"Starting iteration {i+1} of {MAX_ITER}...")
+for i in range(MAX_ITER_DB):
+    print(f"Starting iteration {i+1} of {MAX_ITER_DB}... at {time.time() - timer} seconds.")
+    timer = time.time()
 
     # Randomly sample len(publn_nr_list) patents from Patstat Postgres database that are not in publn_nr_list
     epo_non_cleantech_query = f"""
@@ -199,6 +212,11 @@ for i in range(MAX_ITER):
     df_epo_non_cleantech_sample = process_text_parallel(df_epo_non_cleantech_sample, 'text', extract_yake_keywords)
     df_epo_non_cleantech_sample = process_text_parallel(df_epo_non_cleantech_sample, 'text', postprocess_keyword_list)
     df_epo_non_cleantech_keyword_list = df_epo_non_cleantech_sample.explode('text').groupby('text')['id'].agg(['count', ('ids', lambda x: list(x))]).reset_index()
+    df_epo_non_cleantech_sample.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_epo_non_cleantech_sample_iteration_{i}.json', orient='records')
+    df_epo_non_cleantech_keyword_list.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_epo_non_cleantech_keyword_list_iteration_{i}.json', orient='records')
+    print(f"Finished sampling and processing {len(df_epo_non_cleantech_sample)} patents from EPO in {time.time() - timer} seconds.")
+    timer = time.time()
+    del df_epo_non_cleantech_sample, df_epo_non_cleantech_keyword_list
 
     # Randomly sample len(patent_id_list) patents from PatentsView Postgres database that are not in patent_id_list
     uspto_non_cleantech_query = f"""
@@ -224,15 +242,19 @@ for i in range(MAX_ITER):
     cursor.close()
     df_uspto_non_cleantech_sample.sort_values(by=['patent_id', 'claim_sequence'], inplace=True)
     df_uspto_non_cleantech_sample['claim_text'] = df_uspto_non_cleantech_sample['claim_text'].str.replace(r'^\d+\.\s', ' ', regex=True)
-    df_uspto_non_cleantech_sample['claim_text'] = df_uspto_non_cleantech_sample['claim_text'].astype(str)
+    df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample[df_uspto_non_cleantech_sample['claim_text'].apply(lambda x: isinstance(x, str))]
     df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample.groupby('patent_id')['claim_text'].apply(' '.join).reset_index()
     df_uspto_non_cleantech_sample = process_text_parallel(df_uspto_non_cleantech_sample, 'claim_text', clean_text)
     df_uspto_non_cleantech_sample['patent_id'] = 'uspto-' + df_uspto_non_cleantech_sample['patent_id']
     df_uspto_non_cleantech_sample.rename(columns={'patent_id': 'id', 'claim_text': 'text'}, inplace=True)
     df_uspto_non_cleantech_sample = process_text_parallel(df_uspto_non_cleantech_sample, 'text', extract_yake_keywords)
     df_uspto_non_cleantech_sample = process_text_parallel(df_uspto_non_cleantech_sample, 'text', postprocess_keyword_list)
-    df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample[df_uspto_non_cleantech_sample['text'].apply(lambda x: isinstance(x, str))]
     df_uspto_non_cleantech_keyword_list = df_uspto_non_cleantech_sample.explode('text').groupby('text')['id'].agg(['count', ('ids', lambda x: list(x))]).reset_index()
+    df_uspto_non_cleantech_sample.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_uspto_non_cleantech_sample_iteration_{i}.json', orient='records')
+    df_uspto_non_cleantech_keyword_list.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_uspto_non_cleantech_keyword_list_iteration_{i}.json', orient='records')
+    print(f"Finished sampling and processing {len(df_uspto_non_cleantech_sample)} patents from USPTO in {time.time() - timer} seconds.")
+    timer = time.time()
+    del df_uspto_non_cleantech_sample, df_uspto_non_cleantech_keyword_list
 
     # Randomly sample len(oaid_list) patents from OpenALEX Postgres database that are not in oaid_list
     rel_non_cleantech_query = f"""
@@ -241,7 +263,7 @@ for i in range(MAX_ITER):
         WHERE id NOT IN {tuple(oaid_list)}
         AND abstract_inverted_index IS NOT NULL
         ORDER BY RANDOM()
-        LIMIT {len(oaid_list)*1.2}
+        LIMIT {len(oaid_list)*1.4}
     """
     cursor = conn_openalex.cursor()
     cursor.execute(rel_non_cleantech_query)
@@ -260,6 +282,7 @@ for i in range(MAX_ITER):
                             word_index.append([innerkey, innerindex])
             word_index.sort(key=lambda x: x[1])
             abstract = ' '.join([i[0] for i in word_index])
+            abstract = str(abstract)
             df_rel_non_cleantech_sample.at[index, 'abstract'] = abstract
         except AttributeError:
             continue
@@ -270,21 +293,32 @@ for i in range(MAX_ITER):
     df_rel_non_cleantech_sample.rename(columns={'id': 'id', 'abstract': 'text'}, inplace=True)
     df_rel_non_cleantech_sample = process_text_parallel(df_rel_non_cleantech_sample, 'text', extract_yake_keywords)
     df_rel_non_cleantech_sample = process_text_parallel(df_rel_non_cleantech_sample, 'text', postprocess_keyword_list)
-    df_rel_non_cleantech_sample = df_rel_non_cleantech_sample[df_rel_non_cleantech_sample['text'].apply(lambda x: isinstance(x, str))]
     df_rel_non_cleantech_keyword_list = df_rel_non_cleantech_sample.explode('text').groupby('text')['id'].agg(['count', ('ids', lambda x: list(x))]).reset_index()
+    df_rel_non_cleantech_sample.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_rel_non_cleantech_sample_iteration_{i}.json', orient='records')
+    df_rel_non_cleantech_keyword_list.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_rel_non_cleantech_keyword_list_iteration_{i}.json', orient='records')
+    print(f"Finished sampling and processing {len(df_rel_non_cleantech_sample)} patents from OpenALEX in {time.time() - timer} seconds.")
+    timer = time.time()
+    del df_rel_non_cleantech_sample, df_rel_non_cleantech_keyword_list
 
     # Concatenate non_cleantech_keyword_list dataframes
+    df_epo_non_cleantech_keyword_list = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_epo_non_cleantech_keyword_list_iteration_{i}.json')
+    df_uspto_non_cleantech_keyword_list = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_uspto_non_cleantech_keyword_list_iteration_{i}.json')
+    df_rel_non_cleantech_keyword_list = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_rel_non_cleantech_keyword_list_iteration_{i}.json')
     df_non_cleantech_keyword_list = pd.concat([df_epo_non_cleantech_keyword_list, df_uspto_non_cleantech_keyword_list, df_rel_non_cleantech_keyword_list], ignore_index=True)
+    del df_epo_non_cleantech_keyword_list, df_uspto_non_cleantech_keyword_list, df_rel_non_cleantech_keyword_list
 
     df_non_cleantech_keyword_list = df_non_cleantech_keyword_list.groupby('text').agg({
         'count': 'sum',
         'ids': lambda x: list(itertools.chain(*x))
     }).reset_index()
-    # Print a keyword longer than 2 words
     df_non_cleantech_keyword_list = df_non_cleantech_keyword_list[(df_non_cleantech_keyword_list['count'] >= 5) & (df_non_cleantech_keyword_list['count'] <= 1000)]
 
     # Concatenate samples and perform Logistic Regression
+    df_epo_non_cleantech_sample = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_epo_non_cleantech_sample_iteration_{i}.json')
+    df_uspto_non_cleantech_sample = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_uspto_non_cleantech_sample_iteration_{i}.json')
+    df_rel_non_cleantech_sample = pd.read_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_rel_non_cleantech_sample_iteration_{i}.json')
     g_non_cleantech = pd.concat([df_epo_non_cleantech_sample, df_uspto_non_cleantech_sample, df_rel_non_cleantech_sample], ignore_index=True)
+    del df_epo_non_cleantech_sample, df_uspto_non_cleantech_sample, df_rel_non_cleantech_sample
     g_non_cleantech['text'] = g_non_cleantech['text'].apply(lambda x: ' '.join([keyword for keyword in x if keyword in df_non_cleantech_keyword_list['text'].tolist()]))
     g_non_cleantech = g_non_cleantech.sample(n=len(g_cleantech), random_state=42)
     # print(f"Non Cleantech Sample head: {g_non_cleantech[g_non_cleantech['text'].str.split().str.len() >= 2].sample(5)}")
@@ -298,11 +332,17 @@ for i in range(MAX_ITER):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
     # Train and evaluate the model
-    df_cleantech = train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports)
+    df_cleantech, list_classification_reports, confusion_matrix_list = train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports, confusion_matrix_list)
 
     print(df_cleantech.head())
     print(list_classification_reports)
-    print(f"Finished iteration {i+1} of {MAX_ITER}, classification report: {list_classification_reports[i]}")
+    print(f"Finished iteration {i+1} of {MAX_ITER_DB}, classification report: {list_classification_reports[i]} in {time.time() - timer} seconds.")
 
 conn_openalex.close()
 conn_patstat.close()
+
+df_cleantech.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_cleantech_logistic_regression_random_sampling_iterations_{MAX_ITER_DB}.json', orient='records')
+list_classification_reports = pd.DataFrame(list_classification_reports)
+list_classification_reports.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/list_classification_reports_logistic_regression_random_keyword_generation_iterations_{MAX_ITER_DB}.json', orient='records')
+confusion_matrix_list = pd.DataFrame(confusion_matrix_list)
+confusion_matrix_list.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/confusion_matrix_list_logistic_regression_random_keyword_generation_iterations_{MAX_ITER_DB}.json', orient='records')

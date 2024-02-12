@@ -1,5 +1,6 @@
 import re
 import pandas as pd
+import time
 import numpy as np
 import gcld3
 import multiprocessing as mp
@@ -13,9 +14,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix
 from sklearn.feature_extraction.text import CountVectorizer
+from functools import partial
 
 lemmatizer = WordNetLemmatizer()
-MAX_ITER = 1
+MAX_ITER_DB = 50
 model = LogisticRegression(max_iter=1000)
 detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 
@@ -75,7 +77,7 @@ def make_wordtrie(keyword_list):
     print(f"Added {len(keyword_list)} keywords to trie")
     return trie
 
-def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports):
+def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports, confusion_matrix_list):
     model.fit(X_train, y_train)
     predictions = model.predict(X_test)
     print("Classification Report:\n", classification_report(y_test, predictions))
@@ -86,18 +88,17 @@ def train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantec
     df_keywords_importance = pd.DataFrame(sorted_keywords, columns=['keyword_yake_lemma', f'logistic_regression_importance_iteration_{i}'])
     df_cleantech = pd.merge(df_cleantech, df_keywords_importance, on='keyword_yake_lemma', how='left')
     list_classification_reports.append(classification_report(y_test, predictions, output_dict=True))
-    return df_cleantech
+    confusion_matrix_list.append(confusion_matrix(y_test, predictions))
+    return df_cleantech, list_classification_reports, confusion_matrix_list
 
 def process_text_parallel(df, column, function):
-    with mp.Pool(min(mp.cpu_count(), 12)) as pool:
+    with mp.Pool(min(mp.cpu_count(), 20)) as pool:
         results = pool.map(function, df[column])
     df[column] = results
     return df
 
 def trie_search_parallel(df, column, trie):
-    with mp.Pool(min(mp.cpu_count(), 12)) as pool:
-        # Create a partial function that has the trie already assigned
-        from functools import partial
+    with mp.Pool(min(mp.cpu_count(), 20)) as pool:
         func = partial(search_wrapper, trie)
         results = pool.map(func, df[column])
     df[column] = results
@@ -162,20 +163,29 @@ oaid_list = [oaid[4:] for oaid in oaid_list]
 oaid_list = ['https://openalex.org/W' + str(oaid) for oaid in oaid_list]
 
 list_classification_reports = []
+confusion_matrix_list = []
 
+timer = time.time()
 
-for i in range(MAX_ITER):
-    print(f"Starting iteration {i+1} of {MAX_ITER}...")
+for i in range(MAX_ITER_DB):
+    print(f"Starting iteration {i+1} of {MAX_ITER_DB}...")
 
     # Randomly sample len(publn_nr_list) patents from Patstat Postgres database that are not in publn_nr_list
     epo_non_cleantech_query = f"""
+        WITH random_publn AS (
+            SELECT epo_publn_nr
+            FROM ep_fulltext_data
+            WHERE epo_publn_nr NOT IN {tuple(publn_nr_list)}
+            AND appln_lng = 'en'
+            AND appln_comp ='CLAIM'
+            ORDER BY RANDOM()
+            LIMIT {len(publn_nr_list)*1.2}
+        )
         SELECT epo_publn_nr, appln_kind, appln_text
         FROM ep_fulltext_data
-        WHERE epo_publn_nr NOT IN {tuple(publn_nr_list)}
+        WHERE epo_publn_nr IN (SELECT epo_publn_nr FROM random_publn)
         AND appln_lng = 'en'
         AND appln_comp ='CLAIM'
-        ORDER BY RANDOM()
-        LIMIT {len(publn_nr_list)}
     """
     cursor = conn_patstat.cursor()
     cursor.execute(epo_non_cleantech_query)
@@ -187,15 +197,15 @@ for i in range(MAX_ITER):
     df_epo_non_cleantech_sample.drop_duplicates(subset=['epo_publn_nr'], keep='first', inplace=True)
     df_epo_non_cleantech_sample = process_text_parallel(df_epo_non_cleantech_sample, 'appln_text', clean_claim_text_xml)
     df_epo_non_cleantech_sample = process_text_parallel(df_epo_non_cleantech_sample, 'appln_text', clean_and_lemmatize)
-    print(df_epo_non_cleantech_sample.head()) # FOR TESTING
     df_epo_non_cleantech_sample = trie_search_parallel(df_epo_non_cleantech_sample, 'appln_text', cleantech_trie)
-    print(df_epo_non_cleantech_sample.head()) # FOR TESTING
-    df_epo_non_cleantech_sample.rename(columns={'epo_publn_nr': 'id'}, inplace=True)
+    df_epo_non_cleantech_sample.rename(columns={'epo_publn_nr': 'id', 'appln_text': 'trie'}, inplace=True)
     df_epo_non_cleantech_sample['id'] = 'epo-' + df_epo_non_cleantech_sample['id']
     df_epo_non_cleantech_sample = df_epo_non_cleantech_sample[['id', 'trie']]
+    print(f"Finished sampling {len(publn_nr_list)} patents from EPO database in {time.time() - timer} seconds ...")
+    timer = time.time()
 
     # Randomly sample len(patent_id_list) patents from PatentsView Postgres database that are not in patent_id_list
-    uspto_non_cleantech_query = """
+    uspto_non_cleantech_query = f"""
         WITH distinct_ids AS (
             SELECT DISTINCT patent_id
             FROM public.us_claims
@@ -205,9 +215,9 @@ for i in range(MAX_ITER):
             SELECT patent_id
             FROM distinct_ids
             ORDER BY RANDOM()
-            LIMIT {len(patent_id_list)}
+            LIMIT {len(patent_id_list)*1.2}
         )
-        SELECT us_claims.*
+        SELECT us_claims.patent_id, claim_text, claim_sequence
         FROM public.us_claims
         JOIN ordered_ids
         ON us_claims.patent_id = ordered_ids.patent_id
@@ -218,12 +228,15 @@ for i in range(MAX_ITER):
     cursor.close()
     df_uspto_non_cleantech_sample.sort_values(by=['patent_id', 'claim_sequence'], inplace=True)
     df_uspto_non_cleantech_sample['claim_text'] = df_uspto_non_cleantech_sample['claim_text'].str.replace(r'^\d+\.\s', ' ', regex=True)
+    df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample[df_uspto_non_cleantech_sample['claim_text'].apply(lambda x: isinstance(x, str))]
     df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample.groupby('patent_id')['claim_text'].apply(' '.join).reset_index()
     df_uspto_non_cleantech_sample = process_text_parallel(df_uspto_non_cleantech_sample, 'claim_text', clean_and_lemmatize)
     df_uspto_non_cleantech_sample = trie_search_parallel(df_uspto_non_cleantech_sample, 'claim_text', cleantech_trie)
-    df_uspto_non_cleantech_sample.rename(columns={'patent_id': 'id'}, inplace=True)
+    df_uspto_non_cleantech_sample.rename(columns={'patent_id': 'id', 'claim_text': 'trie'}, inplace=True)
     df_uspto_non_cleantech_sample['id'] = 'us-' + df_uspto_non_cleantech_sample['id']
     df_uspto_non_cleantech_sample = df_uspto_non_cleantech_sample[['id', 'trie']]
+    print(f"Finished sampling {len(patent_id_list)} patents from USPTO database in {time.time() - timer} seconds ...")
+    timer = time.time()
 
     # Randomly sample len(oaid_list) patents from OpenALEX Postgres database that are not in oaid_list
     rel_non_cleantech_query = f"""
@@ -232,18 +245,14 @@ for i in range(MAX_ITER):
         WHERE id NOT IN {tuple(oaid_list)}
         AND abstract_inverted_index IS NOT NULL
         ORDER BY RANDOM()
-        LIMIT {len(oaid_list)}
+        LIMIT {len(oaid_list)*1.2}
     """
     cursor = conn_openalex.cursor()
     cursor.execute(rel_non_cleantech_query)
     df_rel_non_cleantech_sample = pd.DataFrame(cursor.fetchall(), columns=['id', 'abstract_inverted_index'])
-    cursor.close()
-    df_rel_non_cleantech_sample = process_text_parallel(df_rel_non_cleantech_sample, 'abstract', clean_and_lemmatize)
-    df_rel_non_cleantech_sample = trie_search_parallel(df_rel_non_cleantech_sample, 'abstract', cleantech_trie)
-    df_rel_non_cleantech_sample['id'] = 'rel-' + df_rel_non_cleantech_sample['id']
-    df_rel_non_cleantech_sample = df_rel_non_cleantech_sample[['id', 'trie']]
     df_rel_non_cleantech_sample.dropna(subset=['abstract_inverted_index'], inplace=True)
-    # Iterate over abstract_inverted_index columnc
+    cursor.close()
+    # Iterate over abstract_inverted_index column
     for index, row in df_rel_non_cleantech_sample.iterrows():
         word_index = []
         try:
@@ -254,17 +263,31 @@ for i in range(MAX_ITER):
                             word_index.append([innerkey, innerindex])
             word_index.sort(key=lambda x: x[1])
             abstract = ' '.join([i[0] for i in word_index])
+            abstract = str(abstract)
             df_rel_non_cleantech_sample.at[index, 'abstract'] = abstract
         except AttributeError:
             continue
     df_rel_non_cleantech_sample['abstract'] = df_rel_non_cleantech_sample['abstract'].astype(str)
     df_rel_non_cleantech_sample['abstract_language'] = df_rel_non_cleantech_sample['abstract'].apply(lambda x: detector.FindLanguage(text=x).language)
     df_rel_non_cleantech_sample = df_rel_non_cleantech_sample[df_rel_non_cleantech_sample['abstract_language'].str.contains('en')]
+    df_rel_non_cleantech_sample = process_text_parallel(df_rel_non_cleantech_sample, 'abstract', clean_and_lemmatize)
+    df_rel_non_cleantech_sample = trie_search_parallel(df_rel_non_cleantech_sample, 'abstract', cleantech_trie)
+    df_rel_non_cleantech_sample['id'] = 'rel-' + df_rel_non_cleantech_sample['id']
+    df_rel_non_cleantech_sample.rename(columns={'abstract': 'trie'}, inplace=True)
+    df_rel_non_cleantech_sample.dropna(subset=['trie'], inplace=True)
+    df_rel_non_cleantech_sample = df_rel_non_cleantech_sample[['id', 'trie']]
+    print(f"Finished sampling {len(oaid_list)} patents from OpenALEX database in {time.time() - timer} seconds ...")
 
     # Concatenate samples and perform Logistic Regression
-    df_epo_non_cleantech_sample['trie'] = df_epo_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x))
-    df_uspto_non_cleantech_sample['trie'] = df_uspto_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x))
-    df_rel_non_cleantech_sample['trie'] = df_rel_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x))
+    df_uspto_non_cleantech_sample['trie'] = df_uspto_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x) if isinstance(x, list) else (x if isinstance(x, str) else np.nan))
+    df_uspto_non_cleantech_sample.dropna(subset=['trie'], inplace=True)
+
+    df_rel_non_cleantech_sample['trie'] = df_rel_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x) if isinstance(x, list) else (x if isinstance(x, str) else np.nan))
+    df_rel_non_cleantech_sample.dropna(subset=['trie'], inplace=True)
+
+    df_epo_non_cleantech_sample['trie'] = df_epo_non_cleantech_sample['trie'].apply(lambda x: ' '.join(x) if isinstance(x, list) else (x if isinstance(x, str) else np.nan))
+    df_epo_non_cleantech_sample.dropna(subset=['trie'], inplace=True)
+
     g_non_cleantech = pd.concat([df_epo_non_cleantech_sample, df_uspto_non_cleantech_sample, df_rel_non_cleantech_sample], ignore_index=True)
     g_non_cleantech_matrix = Vectorizer.transform(g_non_cleantech['trie'])
 
@@ -276,10 +299,14 @@ for i in range(MAX_ITER):
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
     # Train and evaluate the model
-    df_cleantech = train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports)
+    df_cleantech, list_classification_reports, confusion_matrix_list = train_evaluate_model(i, model, X_train, X_test, y_train, y_test, df_cleantech, list_classification_reports, confusion_matrix_list)
 
-    print(df_cleantech.head())
-    print(list_classification_reports)
+    # print(df_cleantech.head())
+    # print(list_classification_reports)
 
+print(df_cleantech.head())
+df_cleantech.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/df_cleantech_logistic_regression_random_sampling_iterations_{MAX_ITER_DB}.json', orient='records')
+list_classification_reports = pd.DataFrame(list_classification_reports)
+list_classification_reports.to_json(f'/mnt/hdd01/patentsview/Similarity Search - CPC Classification and Claims/list_classification_reports_logistic_regression_random_sampling_iterations_{MAX_ITER_DB}.json', orient='records')
 conn_openalex.close()
 conn_patstat.close()

@@ -8,12 +8,12 @@ tqdm.pandas()
 
 # Database connection details
 url_object = URL.create(
-    drivername='postgresql+psycopg2',
-    username='tie',
-    password='TIE%2023!tuhh',
-    host='134.28.58.100',
-    port=25432,
-    database='Patstat',
+    drivername='drivername',
+    username='username',
+    password='password',
+    host='host',
+    port=port,
+    database='db_name',
 )
 engine = create_engine(url_object) #, echo=True)
 
@@ -21,7 +21,7 @@ errors = []
 
 # Function to process and upload each TSV file
 def process_upload_tsv(file_path):
-    global errors  # Declare errors as a global variable
+    global errors 
 
     # Read TSV file into DataFrame
     df = pd.read_csv(file_path, sep='\t', header=None, names=['appln_auth', 'epo_publn_nr', 'appln_kind', 'appln_date', 'appln_lng', 'appln_comp', 'appln_text_type', 'appln_text'])
@@ -34,16 +34,13 @@ def process_upload_tsv(file_path):
         for index, row in tqdm(df.iterrows(), total=len(df)):
             try:
                 epo_publn_nr = row['epo_publn_nr']
-                # Use the text function to create an executable SQL object
                 query = text("""
                     SELECT appln_id FROM public.tls211_pat_publn
                     WHERE publn_nr = :epo_publn_nr AND publn_auth = 'EP'
                 """)
-                # Execute the query with parameters
                 result = conn.execute(query, {'epo_publn_nr': epo_publn_nr})
                 appln_id = result.fetchone()
 
-                # Convert appln_id to string and remove everything after the dot including the dot
                 appln_id = str(appln_id[0]).split('.')[0] if appln_id else None
 
                 if appln_id:

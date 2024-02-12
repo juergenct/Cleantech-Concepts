@@ -1,11 +1,9 @@
-import os
-import re
-import nltk
-from nltk.stem import WordNetLemmatizer
 import pandas as pd
+import re
 import yake
 import spacy
 import unicodedata
+from nltk.stem import WordNetLemmatizer
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
@@ -24,60 +22,88 @@ windowSize = 5
 numOfKeywords = 25
 
 yake_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size, dedupLim=deduplication_threshold,
-                                 dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
-                                 features=None)
+                                       dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
+                                       features=None)
 
-# Function to extract keywords and filter with noun chunks
-def extract_and_filter(row):
+cleantech = 1
+
+# Function to extract keywords and filter with noun chunks for a given column
+def extract_and_filter(row, column_name):
+    text_content = row[column_name]
+    if pd.isna(text_content):
+        print(f"No content found for column '{column_name}' in publication number: {row['publn_nr']}")
+        return [], []
+    
     try:
-        if row['cleaned_claims'] is None:
-            print("No claims found for patent number: " + str(row['publn_nr']))
-            return [], []
+        # Normalize the text
+        text_content = unicodedata.normalize("NFKD", text_content).encode('ASCII', 'ignore').decode('utf-8')
+        text_content = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", text_content)
+        text_content = re.sub(r"https?:\/\/\S+", "", text_content)
+        text_content = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", text_content)
         
-        # Normalize the text with unicodedata
-        row['cleaned_claims'] = unicodedata.normalize("NFKD", row['cleaned_claims']).encode('ASCII', 'ignore').decode('utf-8')
-        # row['cleaned_claims'] = re.sub(r"[^a-zA-Z- ]|^https?:\/\/.*[\r\n]*|\[.*?\]|\(.*?\)|\{.*?\}", " ", row['cleaned_claims']).lower().strip()
-        row['cleaned_claims'] = re.sub(r"\[.*?\]|\(.*?\)|\{.*?\}", "", row['cleaned_claims'])
-        row['cleaned_claims'] = re.sub(r"https?:\/\/\S+", "", row['cleaned_claims'])
-        row['cleaned_claims'] = re.sub(r"[^a-zA-Z0-9- .,;!?]", "", row['cleaned_claims'])
-        unfiltered_keywords = yake_extractor.extract_keywords(row['cleaned_claims']) # Extract keywords using YAKE
-        doc = nlp(row['cleaned_claims'])
+        unfiltered_keywords = yake_extractor.extract_keywords(text_content)
+        doc = nlp(text_content)
         noun_chunks = [chunk.text.strip().lower() for chunk in doc.noun_chunks]
         filtered_keywords = [(keyword.lower(), score) for keyword, score in unfiltered_keywords if any(keyword.lower() in noun_chunk for noun_chunk in noun_chunks)]
         filtered_keywords = [(lemmatizer.lemmatize(keyword).lower() if len(keyword.split()) == 1 else " ".join([lemmatizer.lemmatize(word).lower() for word in keyword.split()]), score) for keyword, score in filtered_keywords]
         filtered_keywords = [(re.sub(r"[^a-zA-Z- ]", "", keyword).lower().strip(), score) for keyword, score in filtered_keywords]
         return unfiltered_keywords, filtered_keywords
-    except:
-        print("Error in patent number: " + str(row['publn_nr']))
+    except Exception as e:
+        print(f"Error in processing column '{column_name}' for publication number: {row['publn_nr']} - {e}")
         return [], []
 
+def process_columns(row):
+    columns_to_process = ['patent_title', 'patent_abstract', 'claim_fulltext'] # Specify the columns to process
+    results = {}
+    for column in columns_to_process:
+        unfiltered_keywords, filtered_keywords = extract_and_filter(row, column)
+        results[f'keywords_yake_{column}'] = unfiltered_keywords
+        results[f'keywords_yake_{column}_noun_chunk'] = filtered_keywords
+    return results
+
 def main():
-    # Import test data
-    # df = pd.read_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned.json')
-    df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned.json')
+    # Import data
+    if cleantech ==1:
+        df = pd.read_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned.json')
+        df_abstract = pd.read_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned_abstr.json', lines=True)
+    elif cleantech == 0:
+        df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned.json')
+        df_abstract = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_abstr_cleaned.csv')
+    
+    # Merge dataframes on 'publn_nr'
+    df = pd.merge(df, df_abstract[['publn_nr', 'cleaned_abstr']], on='publn_nr', how='left')
+    df = df[['publn_nr', 'TITLE', 'cleaned_abstr', 'cpc_class_symbol', 'cleaned_claims']]
 
-    # Drop all columns except 'publn_nr', 'TITLE', 'appln_id', 'cpc_class_symbol', 'cleaned_claims'
-    # df = df[['publn_nr', 'TITLE', 'appln_id', 'cpc_class_symbol', 'cleaned_claims']]
-
-    # Cast column 'cleaned_claims' to string
+    # Ensure all text columns are string type
+    df['TITLE'] = df['TITLE'].astype(str)
+    df['cleaned_abstr'] = df['cleaned_abstr'].astype(str)
     df['cleaned_claims'] = df['cleaned_claims'].astype(str)
+    df.rename(columns={'TITLE': 'patent_title', 'cleaned_abstr': 'patent_abstract', 'cleaned_claims': 'claim_fulltext'}, inplace=True)
+
+    print(f"Starting to process {len(df)} patents...")
 
     # Set up multiprocessing
-    num_cores = min(6, cpu_count())
+    num_cores = min(4, cpu_count())
     pool = Pool(num_cores)
 
     # Apply the function in parallel
-    results = list(tqdm(pool.imap(extract_and_filter, [row for _, row in df.iterrows()]), total=len(df)))
+    results = list(tqdm(pool.imap(process_columns, [row for _, row in df.iterrows()]), total=len(df)))
 
-    # Split results into separate columns
-    df['keywords_yake_claim'], df['keywords_yake_claim_noun_chunk'] = zip(*results)
+    # Combine results back into the dataframe
+    for i, result in enumerate(results):
+        for key, value in result.items():
+            df.at[i, key] = value
 
     # Save dataframe to json
-    # df.to_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned_yake_noun_chunks.json', orient='records')
-    df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned_yake_noun_chunks.json', orient='records')
+    if cleantech == 1:
+        df.to_json('/mnt/hdd01/PATSTAT Working Directory/PATSTAT/cleantech_epo_text_data_pivot_cleaned_title_abstract_claims_yake_noun_chunks.json', orient='records')
+    elif cleantech == 0:
+        df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_title_abstract_claims_yake_noun_chunks.json', orient='records')
 
     pool.close()
     pool.join()
+
+    print(f"Finished processing {len(df)} patents")
 
 if __name__ == '__main__':
     main()

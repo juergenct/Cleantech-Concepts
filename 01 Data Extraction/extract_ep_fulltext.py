@@ -23,7 +23,7 @@ for txt_file in tqdm(txt_files):
     df_txt = pd.read_csv(txt_file, sep='\t', header=None, names=['appln_auth', 'publn_nr', 'appln_kind', 'appln_date', 'appln_lng', 'appln_comp', 'appln_text_type', 'appln_text'])
 
     # Delete all rows where appln_text_type is not TITLE, CLAIM or AMEND
-    df_txt = df_txt[df_txt['appln_comp'].isin(['TITLE', 'CLAIM', 'AMEND'])]
+    df_txt = df_txt[df_txt['appln_comp'].isin(['TITLE', 'ABSTR', 'CLAIM', 'AMEND'])]
 
     # Cast appln_id to string
     df_txt['publn_nr'] = df_txt['publn_nr'].astype(str)
@@ -45,4 +45,4 @@ for txt_file in tqdm(txt_files):
 
 # Write df_epo_cleantech_result to csv
 # df_epo_cleantech_result.to_csv('/mnt/hdd01/PATSTAT Working Directory/cleantech_epo_cleantech_text_data.csv ')
-df_epo_cleantech_result.to_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data.csv')
+df_epo_cleantech_result.to_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_abstr_claim.csv')
