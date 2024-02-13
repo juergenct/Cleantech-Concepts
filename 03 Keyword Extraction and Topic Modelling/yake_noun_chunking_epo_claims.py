@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 import yake
 import spacy
@@ -74,6 +75,10 @@ def main():
     df = pd.merge(df, df_abstract[['publn_nr', 'cleaned_abstr']], on='publn_nr', how='left')
     df = df[['publn_nr', 'TITLE', 'cleaned_abstr', 'cpc_class_symbol', 'cleaned_claims']]
 
+    df['TITLE'] = df['TITLE'].apply(lambda title: ' '.join(title) if isinstance(title, list) else title)
+    df['cleaned_abstr'] = df['cleaned_abstr'].apply(lambda abstr: ' '.join(abstr) if isinstance(abstr, list) else abstr)
+    df['cleaned_claims'] = df['cleaned_claims'].apply(lambda claims: ' '.join(claims) if isinstance(claims, list) else claims)
+
     # Ensure all text columns are string type
     df['TITLE'] = df['TITLE'].astype(str)
     df['cleaned_abstr'] = df['cleaned_abstr'].astype(str)
@@ -82,17 +87,27 @@ def main():
 
     print(f"Starting to process {len(df)} patents...")
 
-    # Set up multiprocessing
-    num_cores = min(4, cpu_count())
-    pool = Pool(num_cores)
+    # Prepare the data for multiprocessing
+    rows = [row for _, row in df.iterrows()]
 
-    # Apply the function in parallel
-    results = list(tqdm(pool.imap(process_columns, [row for _, row in df.iterrows()]), total=len(df)))
+    # Use multiprocessing Pool efficiently
+    with Pool(min(4, cpu_count())) as pool:
+        # imap returns an iterator that we can directly consume
+        results = list(tqdm(pool.imap(process_columns, rows), total=len(df)))
 
-    # Combine results back into the dataframe
+
+    # Ensure results are directly applicable back to the DataFrame
     for i, result in enumerate(results):
         for key, value in result.items():
-            df.at[i, key] = value
+            if key not in df:
+                df[key] = np.nan
+            # Process and assign the results as before
+            df[key] = df[key].astype(str)
+            df.at[i, key] = '; '.join([kw[0] for kw in value])
+    # Save or further process df
+    print(f"Finished processing {len(df)} patents.")
+
+    print(df.columns)
 
     # Save dataframe to json
     if cleantech == 1:

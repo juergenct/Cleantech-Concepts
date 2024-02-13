@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 import yake
 import spacy
@@ -68,7 +69,12 @@ def main():
         df_abstract = pd.read_json('/mnt/hdd01/patentsview/Patentsview - Cleantech Patents/df_patentsview_patent_cpc_grouped_cleantech.json')
         df = pd.merge(df, df_abstract, on='patent_id', how='left')
         df = df[['patent_id', 'patent_title', 'patent_abstract', 'claim_fulltext', 'cpc']]
-        df = df.astype(str)
+        df['patent_title'] = df['patent_title'].apply(lambda title: ' '.join(title) if isinstance(title, list) else title)
+        df['patent_abstract'] = df['patent_abstract'].apply(lambda abstract: ' '.join(abstract) if isinstance(abstract, list) else abstract)
+        df['claim_fulltext'] = df['claim_fulltext'].apply(lambda claim: ' '.join(claim) if isinstance(claim, list) else claim)
+        df['patent_title'] = df['patent_title'].astype(str)
+        df['patent_abstract'] = df['patent_abstract'].astype(str)
+        df['claim_fulltext'] = df['claim_fulltext'].astype(str)
     
     # Non-cleantech
     elif cleantech == 0:
@@ -76,21 +82,33 @@ def main():
         df_abstract = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/g_uspto_non_cleantech_abstract.csv')
         df = pd.merge(df, df_abstract, on='patent_id', how='left')
         df = df[['patent_id', 'patent_title', 'patent_abstract', 'claim_fulltext']]
-        df = df.astype(str)
-
+        df['patent_title'] = df['patent_title'].apply(lambda title: ' '.join(title) if isinstance(title, list) else title)
+        df['patent_abstract'] = df['patent_abstract'].apply(lambda abstract: ' '.join(abstract) if isinstance(abstract, list) else abstract)
+        df['claim_fulltext'] = df['claim_fulltext'].apply(lambda claim: ' '.join(claim) if isinstance(claim, list) else claim)
+        df['patent_title'] = df['patent_title'].astype(str)
+        df['patent_abstract'] = df['patent_abstract'].astype(str)
+        df['claim_fulltext'] = df['claim_fulltext'].astype(str)
     print(f"Starting to process {len(df)} {'cleantech' if cleantech == 1 else 'non-cleantech'} patents...")
     
-    # Set up multiprocessing
-    num_cores = min(10, cpu_count())
-    pool = Pool(num_cores)
+    # Prepare the data for multiprocessing
+    rows = [row for _, row in df.iterrows()]
 
-    # Apply the function in parallel
-    results = list(tqdm(pool.imap(process_columns, [row for _, row in df.iterrows()]), total=len(df)))
+    # Use multiprocessing Pool efficiently
+    with Pool(min(10, cpu_count())) as pool:
+        # imap returns an iterator that we can directly consume
+        results = list(tqdm(pool.imap(process_columns, rows), total=len(df)))
 
-    # Combine results back into the dataframe
+    # Ensure results are directly applicable back to the DataFrame
     for i, result in enumerate(results):
         for key, value in result.items():
-            df.at[i, key] = value
+            if key not in df:
+                df[key] = np.nan
+            # Process and assign the results as before
+            df[key] = df[key].astype(str)
+            df.at[i, key] = '; '.join([kw[0] for kw in value])
+
+    # Save or further process df
+    print(f"Finished processing {len(df)} patents.")
 
     # Save dataframe to json
     if cleantech == 1:

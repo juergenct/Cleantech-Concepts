@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 import yake
 import spacy
@@ -34,9 +35,14 @@ def extract_and_filter(row):
     results = {'title_keywords': [], 'title_filtered_keywords': [], 'abstract_keywords': [], 'abstract_filtered_keywords': []}
     for column in ['title', 'abstract']:
         text_content = row[column]
+        
+        # Initialize results for each column to handle non-English or missing content
+        results[f'{column}_keywords'] = []
+        results[f'{column}_filtered_keywords'] = []
+        
         if pd.isna(text_content) or detector.FindLanguage(text_content).language != 'en':
             print(f"Skipping or non-English content found for column '{column}' in oaid number: {row['oaid']}")
-            continue
+            continue  # Continue to ensure an entry is still made into results
         
         # Normalize the text
         text_content = unicodedata.normalize("NFKD", text_content).encode('ASCII', 'ignore').decode('utf-8')
@@ -52,14 +58,12 @@ def extract_and_filter(row):
         filtered_keywords = [(lemmatizer.lemmatize(keyword).lower() if len(keyword.split()) == 1 else " ".join([lemmatizer.lemmatize(word).lower() for word in keyword.split()]), score) for keyword, score in filtered_keywords]
         filtered_keywords = [(re.sub(r"[^a-zA-Z- ]", "", keyword).lower().strip(), score) for keyword, score in filtered_keywords]
         
-        if column == 'title':
-            results['title_keywords'] = unfiltered_keywords
-            results['title_filtered_keywords'] = filtered_keywords
-        else:  # column == 'abstract'
-            results['abstract_keywords'] = unfiltered_keywords
-            results['abstract_filtered_keywords'] = filtered_keywords
+        # Assign extracted keywords to the results dictionary
+        results[f'{column}_keywords'] = unfiltered_keywords
+        results[f'{column}_filtered_keywords'] = filtered_keywords
 
     return results
+
 
 def main():
     # Import data
@@ -81,8 +85,11 @@ def main():
 
     # Combine results back into the dataframe
     for i, result in enumerate(results):
-        df.at[i, 'title_keywords'], df.at[i, 'title_filtered_keywords'] = result['title_keywords'], result['title_filtered_keywords']
-        df.at[i, 'abstract_keywords'], df.at[i, 'abstract_filtered_keywords'] = result['abstract_keywords'], result['abstract_filtered_keywords']
+        # Convert the list of tuples to a string or another scalar format
+        df.at[i, 'title_keywords'] = '; '.join([kw[0] for kw in result['title_keywords']])
+        df.at[i, 'title_filtered_keywords'] = '; '.join([kw[0] for kw in result['title_filtered_keywords']])
+        df.at[i, 'abstract_keywords'] = '; '.join([kw[0] for kw in result['abstract_keywords']])
+        df.at[i, 'abstract_filtered_keywords'] = '; '.join([kw[0] for kw in result['abstract_filtered_keywords']])
 
     # Save dataframe to json
     df.to_json('/mnt/hdd01/patentsview/Reliance on Science - Cleantech Patents/df_oaid_Cleantech_y02_individual_works_lang_detect_title_abstract_yake_noun_chunks.json', orient='records')
