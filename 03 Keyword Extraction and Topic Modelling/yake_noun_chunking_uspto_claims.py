@@ -8,7 +8,7 @@ from nltk.stem import WordNetLemmatizer
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
-cleantech = 1
+cleantech = 0
 
 # Load Spacy model
 nlp = spacy.load("en_core_web_lg")
@@ -27,6 +27,8 @@ numOfKeywords = 25
 yake_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size, dedupLim=deduplication_threshold,
                                        dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
                                        features=None)
+
+columns_to_process = ['patent_title', 'patent_abstract', 'claim_fulltext']
 
 # Function to extract keywords and filter with noun chunks
 def extract_and_filter(row, column_name):
@@ -94,18 +96,21 @@ def main():
     rows = [row for _, row in df.iterrows()]
 
     # Use multiprocessing Pool efficiently
-    with Pool(min(10, cpu_count())) as pool:
+    with Pool(min(6, cpu_count())) as pool:
         # imap returns an iterator that we can directly consume
         results = list(tqdm(pool.imap(process_columns, rows), total=len(df)))
 
     # Ensure results are directly applicable back to the DataFrame
-    for i, result in enumerate(results):
-        for key, value in result.items():
-            if key not in df:
-                df[key] = np.nan
-            # Process and assign the results as before
-            df[key] = df[key].astype(str)
-            df.at[i, key] = '; '.join([kw[0] for kw in value])
+    new_columns = {f'keywords_yake_{col}': [] for col in columns_to_process}
+    new_columns.update({f'keywords_yake_{col}_noun_chunk': [] for col in columns_to_process})
+
+    for result in results:
+        for col, value in result.items():
+            new_columns[col].append('; '.join([kw[0] for kw in value]))
+
+    # Assign the new columns to the DataFrame
+    for col, values in new_columns.items():
+        df[col] = values
 
     # Save or further process df
     print(f"Finished processing {len(df)} patents.")

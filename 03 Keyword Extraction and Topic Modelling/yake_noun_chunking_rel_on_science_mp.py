@@ -31,9 +31,14 @@ detector = gcld3.NNetLanguageIdentifier(min_num_bytes=0, max_num_bytes=1000)
 
 # Function to extract keywords and filter with noun chunks for both title and abstract
 def extract_and_filter(row):
-    results = {'title_keywords': [], 'title_filtered_keywords': [], 'abstract_keywords': [], 'abstract_filtered_keywords': []}
+    results = {'keywords_yake_title': [], 'keywords_yake_title_noun_chunk': [], 'keywords_yake_abstract': [], 'keywords_yake_abstract_noun_chunk': []}
     for column in ['title', 'abstract']:
         text_content = row[column]
+
+        # Initialize results for each column to handle non-English or missing content
+        results[f'keywords_yake_{column}'] = []
+        results[f'keywords_yake_{column}_noun_chunk'] = []
+
         if pd.isna(text_content) or detector.FindLanguage(text_content).language != 'en':
             print(f"Skipping or non-English content found for column '{column}' in oaid number: {row['oaid']}")
             continue
@@ -53,11 +58,11 @@ def extract_and_filter(row):
         filtered_keywords = [(re.sub(r"[^a-zA-Z- ]", "", keyword).lower().strip(), score) for keyword, score in filtered_keywords]
         
         if column == 'title':
-            results['title_keywords'] = unfiltered_keywords
-            results['title_filtered_keywords'] = filtered_keywords
+            results['keywords_yake_title'] = unfiltered_keywords
+            results['keywords_yake_title_noun_chunk'] = filtered_keywords
         else:  # column == 'abstract'
-            results['abstract_keywords'] = unfiltered_keywords
-            results['abstract_filtered_keywords'] = filtered_keywords
+            results['keywords_yake_abstract'] = unfiltered_keywords
+            results['keywords_yake_abstract_noun_chunk'] = filtered_keywords
 
     return results
 
@@ -67,6 +72,8 @@ def main():
 
     # Keep only necessary columns
     df = df[['doi', 'title', 'abstract', 'oaid']]
+    df['title'] = df['title'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
+    df['abstract'] = df['abstract'].apply(lambda x: ' '.join(x) if isinstance(x, list) else x)
     df['title'] = df['title'].astype(str)
     df['abstract'] = df['abstract'].astype(str)
 
@@ -79,10 +86,24 @@ def main():
     # Apply the function in parallel
     results = list(tqdm(pool.imap(extract_and_filter, [row for _, row in df.iterrows()]), total=len(df)))
 
-    # Combine results back into the dataframe
-    for i, result in enumerate(results):
-        df.at[i, 'title_keywords'], df.at[i, 'title_filtered_keywords'] = result['title_keywords'], result['title_filtered_keywords']
-        df.at[i, 'abstract_keywords'], df.at[i, 'abstract_filtered_keywords'] = result['abstract_keywords'], result['abstract_filtered_keywords']
+    # Lists to hold the results for each keyword field
+    keywords_yake_title = []
+    keywords_yake_title_noun_chunk = []
+    keywords_yake_abstract = []
+    keywords_yake_abstract_noun_chunk = []
+
+    # Loop through results and build the lists
+    for result in results:
+        keywords_yake_title.append('; '.join([kw[0] for kw in result['keywords_yake_title']]))
+        keywords_yake_title_noun_chunk.append('; '.join([kw[0] for kw in result['keywords_yake_title_noun_chunk']]))
+        keywords_yake_abstract.append('; '.join([kw[0] for kw in result['keywords_yake_abstract']]))
+        keywords_yake_abstract_noun_chunk.append('; '.join([kw[0] for kw in result['keywords_yake_abstract_noun_chunk']]))
+
+    # Assign the lists to the DataFrame, ensuring each row gets its corresponding keywords
+    df['keywords_yake_title'] = keywords_yake_title
+    df['keywords_yake_title_noun_chunk'] = keywords_yake_title_noun_chunk
+    df['keywords_yake_abstract'] = keywords_yake_abstract
+    df['keywords_yake_abstract_noun_chunk'] = keywords_yake_abstract_noun_chunk
 
     # Save dataframe to json
     df.to_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_oaids_non_cleantech_title_abstract_lang_detect_yake_noun_chunks.json', orient='records')

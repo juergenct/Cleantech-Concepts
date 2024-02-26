@@ -26,7 +26,7 @@ yake_extractor = yake.KeywordExtractor(lan=language, n=max_ngram_size, dedupLim=
                                        dedupFunc=deduplication_algo, windowsSize=windowSize, top=numOfKeywords,
                                        features=None)
 
-cleantech = 1
+cleantech = 0
 
 # Function to extract keywords and filter with noun chunks for a given column
 def extract_and_filter(row, column_name):
@@ -70,13 +70,13 @@ def main():
     elif cleantech == 0:
         df = pd.read_json('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_pivot_claims_cleaned.json')
         df_abstract = pd.read_csv('/mnt/hdd01/patentsview/Non Cleantech Patents - Classifier Set/df_epo_non_cleantech_text_data_abstr_cleaned.csv')
-    
+
     # Merge dataframes on 'publn_nr'
-    df = pd.merge(df, df_abstract[['publn_nr', 'cleaned_abstr']], on='publn_nr', how='left')
-    df = df[['publn_nr', 'TITLE', 'cleaned_abstr', 'cpc_class_symbol', 'cleaned_claims']]
+    df = pd.merge(df, df_abstract[['publn_nr', 'ABSTR']], on='publn_nr', how='left')
+    df = df[['publn_nr', 'TITLE', 'ABSTR', 'cleaned_claims']]
 
     df['TITLE'] = df['TITLE'].apply(lambda title: ' '.join(title) if isinstance(title, list) else title)
-    df['cleaned_abstr'] = df['cleaned_abstr'].apply(lambda abstr: ' '.join(abstr) if isinstance(abstr, list) else abstr)
+    df['cleaned_abstr'] = df['ABSTR'].apply(lambda abstr: ' '.join(abstr) if isinstance(abstr, list) else abstr)
     df['cleaned_claims'] = df['cleaned_claims'].apply(lambda claims: ' '.join(claims) if isinstance(claims, list) else claims)
 
     # Ensure all text columns are string type

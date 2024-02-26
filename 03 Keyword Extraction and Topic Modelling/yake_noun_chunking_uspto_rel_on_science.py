@@ -86,10 +86,10 @@ def main():
     # Combine results back into the dataframe
     for i, result in enumerate(results):
         # Convert the list of tuples to a string or another scalar format
-        df.at[i, 'title_keywords'] = '; '.join([kw[0] for kw in result['title_keywords']])
-        df.at[i, 'title_filtered_keywords'] = '; '.join([kw[0] for kw in result['title_filtered_keywords']])
-        df.at[i, 'abstract_keywords'] = '; '.join([kw[0] for kw in result['abstract_keywords']])
-        df.at[i, 'abstract_filtered_keywords'] = '; '.join([kw[0] for kw in result['abstract_filtered_keywords']])
+        df.at[i, 'keywords_yake_title'] = '; '.join([kw[0] for kw in result['title_keywords']])
+        df.at[i, 'keywords_yake_title_noun_chunk'] = '; '.join([kw[0] for kw in result['title_filtered_keywords']])
+        df.at[i, 'keywords_yake_abstract'] = '; '.join([kw[0] for kw in result['abstract_keywords']])
+        df.at[i, 'keywords_yake_abstract_noun_chunk'] = '; '.join([kw[0] for kw in result['abstract_filtered_keywords']])
 
     # Save dataframe to json
     df.to_json('/mnt/hdd01/patentsview/Reliance on Science - Cleantech Patents/df_oaid_Cleantech_y02_individual_works_lang_detect_title_abstract_yake_noun_chunks.json', orient='records')
