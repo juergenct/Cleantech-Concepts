@@ -8,7 +8,7 @@ from nltk.stem import WordNetLemmatizer
 from multiprocessing import Pool, cpu_count
 from tqdm import tqdm
 
-cleantech = 0
+cleantech = 1
 
 # Load Spacy model
 nlp = spacy.load("en_core_web_lg")
@@ -96,7 +96,7 @@ def main():
     rows = [row for _, row in df.iterrows()]
 
     # Use multiprocessing Pool efficiently
-    with Pool(min(6, cpu_count())) as pool:
+    with Pool(min(16, cpu_count())) as pool:
         # imap returns an iterator that we can directly consume
         results = list(tqdm(pool.imap(process_columns, rows), total=len(df)))
 
@@ -128,4 +128,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
